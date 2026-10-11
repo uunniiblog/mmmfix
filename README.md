@@ -12,7 +12,7 @@ Features:
 - Textbox settings: Set opacity and colors.
 - Sprites over bars: Keeps full width tachie to avoid losing detail in 4:3 display mode.
 - Voice text speed: Disable the default text speed synced to voice lines.
-- Voice continuation: Keep voice playing to next line until next voiced line.
+- Voice continuation: Keep voice playback to next line until the next voiced line.
 - High-resolution rendering: Renders the text and interface at main display resolutions instead of 1080p.
 - Mouse cursor restoration: Fixes weird mouse interaction of the game when focusing the game or pressing a keyboard input.
 - ADV wrapping: Allows to change the length of ADV textbox lines. Needed for 4:3 where some long sentences go above the black pillarbox.
