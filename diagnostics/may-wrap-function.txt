@@ -1,0 +1,690 @@
+1800cfc70:     	movl	%r8d, 0x18(%rsp)
+1800cfc75:     	movl	%edx, 0x10(%rsp)
+1800cfc79:     	movl	%ecx, 0x8(%rsp)
+1800cfc7d:     	pushq	%rdi
+1800cfc7e:     	subq	$0x1d0, %rsp            # imm = 0x1D0
+1800cfc85:     	movq	0x15a3b4(%rip), %rax    # 0x18022a040
+1800cfc8c:     	xorq	%rsp, %rax
+1800cfc8f:     	movq	%rax, 0x1c8(%rsp)
+1800cfc97:     	movl	$0x0, 0x20(%rsp)
+1800cfc9f:     	movl	$0x0, 0x30(%rsp)
+1800cfca7:     	movzbl	0x19922a(%rip), %eax    # 0x180268ed8
+1800cfcae:     	movl	%eax, 0x34(%rsp)
+1800cfcb2:     	movl	$0x0, 0x24(%rsp)
+1800cfcba:     	movl	$0x8fc, %ecx            # imm = 0x8FC
+1800cfcbf:     	callq	0x1800deb90 <dllexec+0x89890>
+1800cfcc4:     	testl	%eax, %eax
+1800cfcc6:     	jne	0x1800cfcd2 <dllexec+0x7a9d2>
+1800cfcc8:     	cmpl	$0x0, 0x1f0(%rsp)
+1800cfcd0:     	je	0x1800cfce7 <dllexec+0x7a9e7>
+1800cfcd2:     	movl	0x1e8(%rsp), %eax
+1800cfcd9:     	movl	0x1222225(%rip), %ecx   # 0x1812f1f04
+1800cfcdf:     	subl	%eax, %ecx
+1800cfce1:     	movl	%ecx, %eax
+1800cfce3:     	movl	%eax, 0x30(%rsp)
+1800cfce7:     	movl	$0x0, 0x3c(%rsp)
+1800cfcef:     	movb	$0x1, 0x28(%rsp)
+1800cfcf4:     	movl	0x1e0(%rsp), %eax
+1800cfcfb:     	movl	%eax, 0x70(%rsp)
+1800cfcff:     	movl	0x1222283(%rip), %eax   # 0x1812f1f88
+1800cfd05:     	cmpl	%eax, 0x20(%rsp)
+1800cfd09:     	jae	0x1800d07fc <dllexec+0x7b4fc>
+1800cfd0f:     	movl	$0x0, 0x58(%rsp)
+1800cfd17:     	movl	0x20(%rsp), %eax
+1800cfd1b:     	leaq	0x122d80e(%rip), %rcx   # 0x1812fd530
+1800cfd22:     	movzbl	(%rcx,%rax), %eax
+1800cfd26:     	andl	$0x10, %eax
+1800cfd29:     	testl	%eax, %eax
+1800cfd2b:     	jne	0x1800cfd48 <dllexec+0x7aa48>
+1800cfd2d:     	movl	0x20(%rsp), %eax
+1800cfd31:     	leal	0x2(,%rax,4), %eax
+1800cfd38:     	movl	%eax, %eax
+1800cfd3a:     	leaq	0x1223ebf(%rip), %rcx   # 0x1812f3c00
+1800cfd41:     	movl	(%rcx,%rax,4), %eax
+1800cfd44:     	movl	%eax, 0x58(%rsp)
+1800cfd48:     	movzbl	0x28(%rsp), %eax
+1800cfd4d:     	testl	%eax, %eax
+1800cfd4f:     	je	0x1800d02b5 <dllexec+0x7afb5>
+1800cfd55:     	movl	$0x8, %edx
+1800cfd5a:     	leaq	0x1c0(%rsp), %rcx
+1800cfd62:     	callq	0x18004a570 <.text+0x49570>
+1800cfd67:     	movl	0x20(%rsp), %eax
+1800cfd6b:     	leaq	0x122e41e(%rip), %rcx   # 0x1812fe190
+1800cfd72:     	leaq	(%rcx,%rax,4), %rax
+1800cfd76:     	movq	%rax, 0x90(%rsp)
+1800cfd7e:     	leaq	0xe8(%rsp), %rdx
+1800cfd86:     	leaq	0x1b2bd53(%rip), %rcx   # 0x181bfbae0
+1800cfd8d:     	callq	0x180077250 <dllexec+0x21f50>
+1800cfd92:     	movq	%rax, 0x98(%rsp)
+1800cfd9a:     	leaq	0xf0(%rsp), %rdx
+1800cfda2:     	leaq	0x1b2bd37(%rip), %rcx   # 0x181bfbae0
+1800cfda9:     	callq	0x1800772a0 <dllexec+0x21fa0>
+1800cfdae:     	movq	0x90(%rsp), %rcx
+1800cfdb6:     	movq	%rcx, %r9
+1800cfdb9:     	movq	0x98(%rsp), %rcx
+1800cfdc1:     	movq	(%rcx), %r8
+1800cfdc4:     	movq	(%rax), %rdx
+1800cfdc7:     	leaq	0x1c0(%rsp), %rcx
+1800cfdcf:     	callq	0x1800da320 <dllexec+0x85020>
+1800cfdd4:     	nop
+1800cfdd5:     	leaq	0xf8(%rsp), %rdx
+1800cfddd:     	leaq	0x1b2bcfc(%rip), %rcx   # 0x181bfbae0
+1800cfde4:     	callq	0x180077250 <dllexec+0x21f50>
+1800cfde9:     	movq	%rax, %rdx
+1800cfdec:     	leaq	0x1c0(%rsp), %rcx
+1800cfdf4:     	callq	0x1800771d0 <dllexec+0x21ed0>
+1800cfdf9:     	movzbl	%al, %eax
+1800cfdfc:     	testl	%eax, %eax
+1800cfdfe:     	je	0x1800d02b5 <dllexec+0x7afb5>
+1800cfe04:     	leaq	0x100(%rsp), %rdx
+1800cfe0c:     	leaq	0x1b2bccd(%rip), %rcx   # 0x181bfbae0
+1800cfe13:     	callq	0x1800772a0 <dllexec+0x21fa0>
+1800cfe18:     	movq	0x1c0(%rsp), %rdx
+1800cfe20:     	movq	(%rax), %rcx
+1800cfe23:     	callq	0x1800da3b0 <dllexec+0x850b0>
+1800cfe28:     	movl	%eax, 0x48(%rsp)
+1800cfe2c:     	movl	$0x18, %edx
+1800cfe31:     	leaq	0x1a8(%rsp), %rcx
+1800cfe39:     	callq	0x18004a570 <.text+0x49570>
+1800cfe3e:     	leaq	0x54(%rsp), %rcx
+1800cfe43:     	callq	0x180054830 <.text+0x53830>
+1800cfe48:     	movl	0x122213a(%rip), %ecx   # 0x1812f1f88
+1800cfe4e:     	leaq	0x122e33b(%rip), %rdx   # 0x1812fe190
+1800cfe55:     	leaq	(%rdx,%rcx,4), %rcx
+1800cfe59:     	movq	%rax, %r9
+1800cfe5c:     	movq	%rcx, %r8
+1800cfe5f:     	leaq	0x122e32a(%rip), %rdx   # 0x1812fe190
+1800cfe66:     	leaq	0x1a8(%rsp), %rcx
+1800cfe6e:     	callq	0x1800da4c0 <dllexec+0x851c0>
+1800cfe73:     	nop
+1800cfe74:     	movslq	0x48(%rsp), %rax
+1800cfe79:     	movq	%rax, %rdx
+1800cfe7c:     	leaq	0x1b2bc5d(%rip), %rcx   # 0x181bfbae0
+1800cfe83:     	callq	0x1800ae880 <dllexec+0x59580>
+1800cfe88:     	movq	%rax, 0xa0(%rsp)
+1800cfe90:     	leaq	0x108(%rsp), %rdx
+1800cfe98:     	leaq	0x1a8(%rsp), %rcx
+1800cfea0:     	callq	0x180077250 <dllexec+0x21f50>
+1800cfea5:     	movq	%rax, 0xa8(%rsp)
+1800cfead:     	leaq	0x110(%rsp), %rdx
+1800cfeb5:     	leaq	0x1a8(%rsp), %rcx
+1800cfebd:     	callq	0x1800772a0 <dllexec+0x21fa0>
+1800cfec2:     	movq	0xa0(%rsp), %rcx
+1800cfeca:     	movq	%rcx, %r8
+1800cfecd:     	movq	0xa8(%rsp), %rcx
+1800cfed5:     	movq	(%rcx), %rdx
+1800cfed8:     	movq	(%rax), %rcx
+1800cfedb:     	callq	0x1800da580 <dllexec+0x85280>
+1800cfee0:     	movq	%rax, 0x118(%rsp)
+1800cfee8:     	movl	0x48(%rsp), %eax
+1800cfeec:     	incl	%eax
+1800cfeee:     	cltq
+1800cfef0:     	movq	%rax, %rdx
+1800cfef3:     	leaq	0x1b2bbe6(%rip), %rcx   # 0x181bfbae0
+1800cfefa:     	callq	0x1800ae880 <dllexec+0x59580>
+1800cfeff:     	movq	%rax, 0xb0(%rsp)
+1800cff07:     	leaq	0x120(%rsp), %rdx
+1800cff0f:     	leaq	0x1a8(%rsp), %rcx
+1800cff17:     	callq	0x180077250 <dllexec+0x21f50>
+1800cff1c:     	movq	%rax, 0xb8(%rsp)
+1800cff24:     	leaq	0x128(%rsp), %rdx
+1800cff2c:     	leaq	0x1a8(%rsp), %rcx
+1800cff34:     	callq	0x1800772a0 <dllexec+0x21fa0>
+1800cff39:     	movq	0xb0(%rsp), %rcx
+1800cff41:     	movq	%rcx, %r8
+1800cff44:     	movq	0xb8(%rsp), %rcx
+1800cff4c:     	movq	(%rcx), %rdx
+1800cff4f:     	movq	(%rax), %rcx
+1800cff52:     	callq	0x1800da580 <dllexec+0x85280>
+1800cff57:     	movq	%rax, 0x130(%rsp)
+1800cff5f:     	xorl	%edx, %edx
+1800cff61:     	leaq	0x1a8(%rsp), %rcx
+1800cff69:     	callq	0x1800ae880 <dllexec+0x59580>
+1800cff6e:     	movzwl	(%rax), %eax
+1800cff71:     	cmpl	$0x8001, %eax           # imm = 0x8001
+1800cff76:     	jne	0x1800d00ad <dllexec+0x7adad>
+1800cff7c:     	movl	$0x8, %edx
+1800cff81:     	leaq	0x1a0(%rsp), %rcx
+1800cff89:     	callq	0x18004a570 <.text+0x49570>
+1800cff8e:     	movl	$0x8002, 0x5c(%rsp)     # imm = 0x8002
+1800cff96:     	leaq	0x138(%rsp), %rdx
+1800cff9e:     	leaq	0x1a8(%rsp), %rcx
+1800cffa6:     	callq	0x180077250 <dllexec+0x21f50>
+1800cffab:     	movq	%rax, 0xc0(%rsp)
+1800cffb3:     	leaq	0x140(%rsp), %rdx
+1800cffbb:     	leaq	0x1a8(%rsp), %rcx
+1800cffc3:     	callq	0x1800772a0 <dllexec+0x21fa0>
+1800cffc8:     	leaq	0x5c(%rsp), %r9
+1800cffcd:     	movq	0xc0(%rsp), %rcx
+1800cffd5:     	movq	(%rcx), %r8
+1800cffd8:     	movq	(%rax), %rdx
+1800cffdb:     	leaq	0x1a0(%rsp), %rcx
+1800cffe3:     	callq	0x1800da680 <dllexec+0x85380>
+1800cffe8:     	nop
+1800cffe9:     	leaq	0x148(%rsp), %rdx
+1800cfff1:     	leaq	0x1a8(%rsp), %rcx
+1800cfff9:     	callq	0x1800772a0 <dllexec+0x21fa0>
+1800cfffe:     	movq	0x1a0(%rsp), %rdx
+1800d0006:     	movq	(%rax), %rcx
+1800d0009:     	callq	0x1800da3b0 <dllexec+0x850b0>
+1800d000e:     	movq	%rax, 0xc8(%rsp)
+1800d0016:     	leaq	0x150(%rsp), %rdx
+1800d001e:     	leaq	0x1a8(%rsp), %rcx
+1800d0026:     	callq	0x1800772a0 <dllexec+0x21fa0>
+1800d002b:     	movq	0xc8(%rsp), %rcx
+1800d0033:     	movq	%rcx, %r8
+1800d0036:     	leaq	0x158(%rsp), %rdx
+1800d003e:     	movq	%rax, %rcx
+1800d0041:     	callq	0x1800daae0 <dllexec+0x857e0>
+1800d0046:     	movl	$0x1, %r8d
+1800d004c:     	leaq	0x160(%rsp), %rdx
+1800d0054:     	movq	%rax, %rcx
+1800d0057:     	callq	0x1800daae0 <dllexec+0x857e0>
+1800d005c:     	movq	(%rax), %rax
+1800d005f:     	movq	%rax, 0xd0(%rsp)
+1800d0067:     	leaq	0x168(%rsp), %rdx
+1800d006f:     	leaq	0x1a8(%rsp), %rcx
+1800d0077:     	callq	0x1800772a0 <dllexec+0x21fa0>
+1800d007c:     	movq	(%rax), %rax
+1800d007f:     	movq	%rax, 0xd8(%rsp)
+1800d0087:     	movq	0xd0(%rsp), %r9
+1800d008f:     	movq	0xd8(%rsp), %r8
+1800d0097:     	leaq	0x170(%rsp), %rdx
+1800d009f:     	leaq	0x1a8(%rsp), %rcx
+1800d00a7:     	callq	0x1800dab30 <dllexec+0x85830>
+1800d00ac:     	nop
+1800d00ad:     	leaq	0x38(%rsp), %rax
+1800d00b2:     	movq	%rax, %rdi
+1800d00b5:     	xorl	%eax, %eax
+1800d00b7:     	movl	$0x1, %ecx
+1800d00bc:     	rep		stosb	%al, %es:(%rdi)
+1800d00be:     	leaq	0x1a8(%rsp), %rdx
+1800d00c6:     	leaq	0x178(%rsp), %rcx
+1800d00ce:     	callq	0x1800da740 <dllexec+0x85440>
+1800d00d3:     	movq	%rax, 0xe0(%rsp)
+1800d00db:     	leaq	0x1a8(%rsp), %rdx
+1800d00e3:     	leaq	0x180(%rsp), %rcx
+1800d00eb:     	callq	0x1800da710 <dllexec+0x85410>
+1800d00f0:     	movzbl	0x38(%rsp), %r9d
+1800d00f6:     	movq	0xe0(%rsp), %rcx
+1800d00fe:     	movq	(%rcx), %r8
+1800d0101:     	movq	(%rax), %rdx
+1800d0104:     	leaq	0x188(%rsp), %rcx
+1800d010c:     	callq	0x1800da770 <dllexec+0x85470>
+1800d0111:     	movq	(%rax), %rax
+1800d0114:     	movq	%rax, 0x80(%rsp)
+1800d011c:     	leaq	0x1a8(%rsp), %rdx
+1800d0124:     	leaq	0x190(%rsp), %rcx
+1800d012c:     	callq	0x1800da890 <dllexec+0x85590>
+1800d0131:     	movq	(%rax), %r9
+1800d0134:     	movq	0x80(%rsp), %r8
+1800d013c:     	leaq	0x198(%rsp), %rdx
+1800d0144:     	leaq	0x1a8(%rsp), %rcx
+1800d014c:     	callq	0x1800dab30 <dllexec+0x85830>
+1800d0151:     	nop
+1800d0152:     	xorl	%edx, %edx
+1800d0154:     	leaq	0x1a8(%rsp), %rcx
+1800d015c:     	callq	0x1800ae880 <dllexec+0x59580>
+1800d0161:     	movzwl	(%rax), %eax
+1800d0164:     	movl	%eax, 0x60(%rsp)
+1800d0168:     	movslq	0x48(%rsp), %rcx
+1800d016d:     	movq	%rcx, %rdx
+1800d0170:     	leaq	0x1b2b969(%rip), %rcx   # 0x181bfbae0
+1800d0177:     	callq	0x1800ae880 <dllexec+0x59580>
+1800d017c:     	movzwl	(%rax), %eax
+1800d017f:     	movl	0x60(%rsp), %ecx
+1800d0183:     	cmpl	%eax, %ecx
+1800d0185:     	jne	0x1800d02a2 <dllexec+0x7afa2>
+1800d018b:     	movl	$0x1, 0x4c(%rsp)
+1800d0193:     	movl	$0x0, 0x6c(%rsp)
+1800d019b:     	movl	$0x1, 0x40(%rsp)
+1800d01a3:     	jmp	0x1800d01af <dllexec+0x7aeaf>
+1800d01a5:     	movl	0x40(%rsp), %eax
+1800d01a9:     	incl	%eax
+1800d01ab:     	movl	%eax, 0x40(%rsp)
+1800d01af:     	movslq	0x40(%rsp), %rax
+1800d01b4:     	movq	%rax, 0x88(%rsp)
+1800d01bc:     	leaq	0x1a8(%rsp), %rcx
+1800d01c4:     	callq	0x1800ae8b0 <dllexec+0x595b0>
+1800d01c9:     	movq	0x88(%rsp), %rcx
+1800d01d1:     	cmpq	%rax, %rcx
+1800d01d4:     	jae	0x1800d027e <dllexec+0x7af7e>
+1800d01da:     	movslq	0x40(%rsp), %rax
+1800d01df:     	movq	%rax, %rdx
+1800d01e2:     	leaq	0x1a8(%rsp), %rcx
+1800d01ea:     	callq	0x1800ae880 <dllexec+0x59580>
+1800d01ef:     	movzwl	(%rax), %eax
+1800d01f2:     	movl	%eax, 0x64(%rsp)
+1800d01f6:     	movslq	0x48(%rsp), %rcx
+1800d01fb:     	movq	%rcx, %rdx
+1800d01fe:     	leaq	0x1b2b8db(%rip), %rcx   # 0x181bfbae0
+1800d0205:     	callq	0x1800ae880 <dllexec+0x59580>
+1800d020a:     	movzwl	(%rax), %eax
+1800d020d:     	movl	0x64(%rsp), %ecx
+1800d0211:     	cmpl	%eax, %ecx
+1800d0213:     	jne	0x1800d021f <dllexec+0x7af1f>
+1800d0215:     	movl	0x4c(%rsp), %eax
+1800d0219:     	incl	%eax
+1800d021b:     	movl	%eax, 0x4c(%rsp)
+1800d021f:     	movslq	0x40(%rsp), %rax
+1800d0224:     	movq	%rax, %rdx
+1800d0227:     	leaq	0x1a8(%rsp), %rcx
+1800d022f:     	callq	0x1800ae880 <dllexec+0x59580>
+1800d0234:     	movzwl	(%rax), %eax
+1800d0237:     	movl	%eax, 0x68(%rsp)
+1800d023b:     	movl	0x48(%rsp), %ecx
+1800d023f:     	incl	%ecx
+1800d0241:     	movslq	%ecx, %rcx
+1800d0244:     	movq	%rcx, %rdx
+1800d0247:     	leaq	0x1b2b892(%rip), %rcx   # 0x181bfbae0
+1800d024e:     	callq	0x1800ae880 <dllexec+0x59580>
+1800d0253:     	movzwl	(%rax), %eax
+1800d0256:     	movl	0x68(%rsp), %ecx
+1800d025a:     	cmpl	%eax, %ecx
+1800d025c:     	jne	0x1800d0268 <dllexec+0x7af68>
+1800d025e:     	movl	0x4c(%rsp), %eax
+1800d0262:     	decl	%eax
+1800d0264:     	movl	%eax, 0x4c(%rsp)
+1800d0268:     	cmpl	$0x0, 0x4c(%rsp)
+1800d026d:     	jne	0x1800d0279 <dllexec+0x7af79>
+1800d026f:     	movl	0x40(%rsp), %eax
+1800d0273:     	movl	%eax, 0x6c(%rsp)
+1800d0277:     	jmp	0x1800d027e <dllexec+0x7af7e>
+1800d0279:     	jmp	0x1800d01a5 <dllexec+0x7aea5>
+1800d027e:     	cmpl	$0x0, 0x12220cb(%rip)   # 0x1812f2350
+1800d0285:     	jne	0x1800d02a2 <dllexec+0x7afa2>
+1800d0287:     	movl	0x20(%rsp), %eax
+1800d028b:     	leal	0x2(,%rax,4), %eax
+1800d0292:     	movl	%eax, %eax
+1800d0294:     	leaq	0x1223965(%rip), %rcx   # 0x1812f3c00
+1800d029b:     	movl	(%rcx,%rax,4), %eax
+1800d029e:     	movl	%eax, 0x3c(%rsp)
+1800d02a2:     	movb	$0x0, 0x28(%rsp)
+1800d02a7:     	leaq	0x1a8(%rsp), %rcx
+1800d02af:     	callq	0x1800ae940 <dllexec+0x59640>
+1800d02b4:     	nop
+1800d02b5:     	movl	0x58(%rsp), %eax
+1800d02b9:     	movl	0x30(%rsp), %ecx
+1800d02bd:     	addl	%eax, %ecx
+1800d02bf:     	movl	%ecx, %eax
+1800d02c1:     	cmpl	0x70(%rsp), %eax
+1800d02c5:     	jbe	0x1800d0765 <dllexec+0x7b465>
+1800d02cb:     	movl	0x20(%rsp), %eax
+1800d02cf:     	decl	%eax
+1800d02d1:     	movl	%eax, %eax
+1800d02d3:     	leaq	0x122d256(%rip), %rcx   # 0x1812fd530
+1800d02da:     	movzbl	(%rcx,%rax), %eax
+1800d02de:     	andl	$0x2, %eax
+1800d02e1:     	testl	%eax, %eax
+1800d02e3:     	je	0x1800d02fd <dllexec+0x7affd>
+1800d02e5:     	movl	0x20(%rsp), %eax
+1800d02e9:     	decl	%eax
+1800d02eb:     	movl	%eax, %eax
+1800d02ed:     	leaq	0x122d23c(%rip), %rcx   # 0x1812fd530
+1800d02f4:     	movzbl	(%rcx,%rax), %eax
+1800d02f8:     	cmpl	$0x7, %eax
+1800d02fb:     	jne	0x1800d035a <dllexec+0x7b05a>
+1800d02fd:     	movl	0x20(%rsp), %eax
+1800d0301:     	leaq	0x122d228(%rip), %rcx   # 0x1812fd530
+1800d0308:     	movzbl	(%rcx,%rax), %eax
+1800d030c:     	andl	$0x1, %eax
+1800d030f:     	testl	%eax, %eax
+1800d0311:     	jne	0x1800d035a <dllexec+0x7b05a>
+1800d0313:     	movl	0x20(%rsp), %eax
+1800d0317:     	decl	%eax
+1800d0319:     	movl	%eax, %eax
+1800d031b:     	leaq	0x122d20e(%rip), %rcx   # 0x1812fd530
+1800d0322:     	movb	$0x7, (%rcx,%rax)
+1800d0326:     	movl	0x34(%rsp), %eax
+1800d032a:     	leaq	0x1232b6f(%rip), %rcx   # 0x181302ea0
+1800d0331:     	movl	0x24(%rsp), %edx
+1800d0335:     	leaq	0x121ce94(%rip), %rdi   # 0x1812ed1d0
+1800d033c:     	movzbl	(%rcx,%rax), %eax
+1800d0340:     	movb	%al, (%rdi,%rdx)
+1800d0343:     	movl	0x24(%rsp), %eax
+1800d0347:     	incl	%eax
+1800d0349:     	movl	%eax, 0x24(%rsp)
+1800d034d:     	movl	0x3c(%rsp), %eax
+1800d0351:     	movl	%eax, 0x30(%rsp)
+1800d0355:     	jmp	0x1800cfcff <dllexec+0x7a9ff>
+1800d035a:     	movl	0x20(%rsp), %eax
+1800d035e:     	movl	%eax, 0x50(%rsp)
+1800d0362:     	movl	0x20(%rsp), %eax
+1800d0366:     	decl	%eax
+1800d0368:     	movl	%eax, 0x20(%rsp)
+1800d036c:     	movl	$0x0, 0x44(%rsp)
+1800d0374:     	movl	$0x0, 0x2c(%rsp)
+1800d037c:     	movl	0x20(%rsp), %eax
+1800d0380:     	leaq	0x122d1a9(%rip), %rcx   # 0x1812fd530
+1800d0387:     	movzbl	(%rcx,%rax), %eax
+1800d038b:     	andl	$0x10, %eax
+1800d038e:     	testl	%eax, %eax
+1800d0390:     	jne	0x1800d03ad <dllexec+0x7b0ad>
+1800d0392:     	movl	0x20(%rsp), %eax
+1800d0396:     	leal	0x2(,%rax,4), %eax
+1800d039d:     	movl	%eax, %eax
+1800d039f:     	leaq	0x122385a(%rip), %rcx   # 0x1812f3c00
+1800d03a6:     	movl	(%rcx,%rax,4), %eax
+1800d03a9:     	movl	%eax, 0x2c(%rsp)
+1800d03ad:     	cmpl	$0x0, 0x20(%rsp)
+1800d03b2:     	jbe	0x1800d04a2 <dllexec+0x7b1a2>
+1800d03b8:     	cmpl	$0x12c, 0x2c(%rsp)      # imm = 0x12C
+1800d03c0:     	jae	0x1800d04a2 <dllexec+0x7b1a2>
+1800d03c6:     	movl	0x20(%rsp), %eax
+1800d03ca:     	decl	%eax
+1800d03cc:     	movl	%eax, %eax
+1800d03ce:     	leaq	0x122d15b(%rip), %rcx   # 0x1812fd530
+1800d03d5:     	movzbl	(%rcx,%rax), %eax
+1800d03d9:     	andl	$0x2, %eax
+1800d03dc:     	testl	%eax, %eax
+1800d03de:     	je	0x1800d03f8 <dllexec+0x7b0f8>
+1800d03e0:     	movl	0x20(%rsp), %eax
+1800d03e4:     	decl	%eax
+1800d03e6:     	movl	%eax, %eax
+1800d03e8:     	leaq	0x122d141(%rip), %rcx   # 0x1812fd530
+1800d03ef:     	movzbl	(%rcx,%rax), %eax
+1800d03f3:     	cmpl	$0x7, %eax
+1800d03f6:     	jne	0x1800d045a <dllexec+0x7b15a>
+1800d03f8:     	movl	0x20(%rsp), %eax
+1800d03fc:     	leaq	0x122d12d(%rip), %rcx   # 0x1812fd530
+1800d0403:     	movzbl	(%rcx,%rax), %eax
+1800d0407:     	andl	$0x1, %eax
+1800d040a:     	testl	%eax, %eax
+1800d040c:     	jne	0x1800d045a <dllexec+0x7b15a>
+1800d040e:     	movl	0x20(%rsp), %eax
+1800d0412:     	decl	%eax
+1800d0414:     	movl	%eax, %eax
+1800d0416:     	leaq	0x122d113(%rip), %rcx   # 0x1812fd530
+1800d041d:     	movb	$0x7, (%rcx,%rax)
+1800d0421:     	movl	0x34(%rsp), %eax
+1800d0425:     	leaq	0x1232a74(%rip), %rcx   # 0x181302ea0
+1800d042c:     	movl	0x24(%rsp), %edx
+1800d0430:     	leaq	0x121cd99(%rip), %rdi   # 0x1812ed1d0
+1800d0437:     	movzbl	(%rcx,%rax), %eax
+1800d043b:     	movb	%al, (%rdi,%rdx)
+1800d043e:     	movl	0x24(%rsp), %eax
+1800d0442:     	incl	%eax
+1800d0444:     	movl	%eax, 0x24(%rsp)
+1800d0448:     	movl	0x3c(%rsp), %eax
+1800d044c:     	movl	%eax, 0x30(%rsp)
+1800d0450:     	movl	$0x1, 0x44(%rsp)
+1800d0458:     	jmp	0x1800d04a2 <dllexec+0x7b1a2>
+1800d045a:     	movl	0x20(%rsp), %eax
+1800d045e:     	decl	%eax
+1800d0460:     	movl	%eax, 0x20(%rsp)
+1800d0464:     	movl	0x20(%rsp), %eax
+1800d0468:     	leaq	0x122d0c1(%rip), %rcx   # 0x1812fd530
+1800d046f:     	movzbl	(%rcx,%rax), %eax
+1800d0473:     	andl	$0x10, %eax
+1800d0476:     	testl	%eax, %eax
+1800d0478:     	jne	0x1800d049d <dllexec+0x7b19d>
+1800d047a:     	movl	0x20(%rsp), %eax
+1800d047e:     	leal	0x2(,%rax,4), %eax
+1800d0485:     	movl	%eax, %eax
+1800d0487:     	leaq	0x1223772(%rip), %rcx   # 0x1812f3c00
+1800d048e:     	movl	(%rcx,%rax,4), %eax
+1800d0491:     	movl	0x2c(%rsp), %ecx
+1800d0495:     	addl	%eax, %ecx
+1800d0497:     	movl	%ecx, %eax
+1800d0499:     	movl	%eax, 0x2c(%rsp)
+1800d049d:     	jmp	0x1800d03ad <dllexec+0x7b0ad>
+1800d04a2:     	cmpl	$0x0, 0x44(%rsp)
+1800d04a7:     	je	0x1800d04ae <dllexec+0x7b1ae>
+1800d04a9:     	jmp	0x1800cfcff <dllexec+0x7a9ff>
+1800d04ae:     	movl	$0x0, 0x2c(%rsp)
+1800d04b6:     	movl	0x20(%rsp), %eax
+1800d04ba:     	leaq	0x122d06f(%rip), %rcx   # 0x1812fd530
+1800d04c1:     	movzbl	(%rcx,%rax), %eax
+1800d04c5:     	andl	$0x10, %eax
+1800d04c8:     	testl	%eax, %eax
+1800d04ca:     	jne	0x1800d04e7 <dllexec+0x7b1e7>
+1800d04cc:     	movl	0x20(%rsp), %eax
+1800d04d0:     	leal	0x2(,%rax,4), %eax
+1800d04d7:     	movl	%eax, %eax
+1800d04d9:     	leaq	0x1223720(%rip), %rcx   # 0x1812f3c00
+1800d04e0:     	movl	(%rcx,%rax,4), %eax
+1800d04e3:     	movl	%eax, 0x2c(%rsp)
+1800d04e7:     	movl	0x50(%rsp), %eax
+1800d04eb:     	incl	%eax
+1800d04ed:     	movl	%eax, 0x20(%rsp)
+1800d04f1:     	movl	0x1221a91(%rip), %eax   # 0x1812f1f88
+1800d04f7:     	cmpl	%eax, 0x20(%rsp)
+1800d04fb:     	jae	0x1800d05ec <dllexec+0x7b2ec>
+1800d0501:     	cmpl	$0x0, 0x2c(%rsp)
+1800d0506:     	jae	0x1800d05ec <dllexec+0x7b2ec>
+1800d050c:     	movl	0x20(%rsp), %eax
+1800d0510:     	decl	%eax
+1800d0512:     	movl	%eax, %eax
+1800d0514:     	leaq	0x122d015(%rip), %rcx   # 0x1812fd530
+1800d051b:     	movzbl	(%rcx,%rax), %eax
+1800d051f:     	andl	$0x2, %eax
+1800d0522:     	testl	%eax, %eax
+1800d0524:     	je	0x1800d053e <dllexec+0x7b23e>
+1800d0526:     	movl	0x20(%rsp), %eax
+1800d052a:     	decl	%eax
+1800d052c:     	movl	%eax, %eax
+1800d052e:     	leaq	0x122cffb(%rip), %rcx   # 0x1812fd530
+1800d0535:     	movzbl	(%rcx,%rax), %eax
+1800d0539:     	cmpl	$0x7, %eax
+1800d053c:     	jne	0x1800d05a0 <dllexec+0x7b2a0>
+1800d053e:     	movl	0x20(%rsp), %eax
+1800d0542:     	leaq	0x122cfe7(%rip), %rcx   # 0x1812fd530
+1800d0549:     	movzbl	(%rcx,%rax), %eax
+1800d054d:     	andl	$0x1, %eax
+1800d0550:     	testl	%eax, %eax
+1800d0552:     	jne	0x1800d05a0 <dllexec+0x7b2a0>
+1800d0554:     	movl	0x20(%rsp), %eax
+1800d0558:     	decl	%eax
+1800d055a:     	movl	%eax, %eax
+1800d055c:     	leaq	0x122cfcd(%rip), %rcx   # 0x1812fd530
+1800d0563:     	movb	$0x7, (%rcx,%rax)
+1800d0567:     	movl	0x34(%rsp), %eax
+1800d056b:     	leaq	0x123292e(%rip), %rcx   # 0x181302ea0
+1800d0572:     	movl	0x24(%rsp), %edx
+1800d0576:     	leaq	0x121cc53(%rip), %rdi   # 0x1812ed1d0
+1800d057d:     	movzbl	(%rcx,%rax), %eax
+1800d0581:     	movb	%al, (%rdi,%rdx)
+1800d0584:     	movl	0x24(%rsp), %eax
+1800d0588:     	incl	%eax
+1800d058a:     	movl	%eax, 0x24(%rsp)
+1800d058e:     	movl	0x3c(%rsp), %eax
+1800d0592:     	movl	%eax, 0x30(%rsp)
+1800d0596:     	movl	$0x1, 0x44(%rsp)
+1800d059e:     	jmp	0x1800d05ec <dllexec+0x7b2ec>
+1800d05a0:     	movl	0x20(%rsp), %eax
+1800d05a4:     	decl	%eax
+1800d05a6:     	movl	%eax, %eax
+1800d05a8:     	leaq	0x122cf81(%rip), %rcx   # 0x1812fd530
+1800d05af:     	movzbl	(%rcx,%rax), %eax
+1800d05b3:     	andl	$0x10, %eax
+1800d05b6:     	testl	%eax, %eax
+1800d05b8:     	jne	0x1800d05dd <dllexec+0x7b2dd>
+1800d05ba:     	movl	0x20(%rsp), %eax
+1800d05be:     	leal	-0x2(,%rax,4), %eax
+1800d05c5:     	movl	%eax, %eax
+1800d05c7:     	leaq	0x1223632(%rip), %rcx   # 0x1812f3c00
+1800d05ce:     	movl	(%rcx,%rax,4), %eax
+1800d05d1:     	movl	0x2c(%rsp), %ecx
+1800d05d5:     	addl	%eax, %ecx
+1800d05d7:     	movl	%ecx, %eax
+1800d05d9:     	movl	%eax, 0x2c(%rsp)
+1800d05dd:     	movl	0x20(%rsp), %eax
+1800d05e1:     	incl	%eax
+1800d05e3:     	movl	%eax, 0x20(%rsp)
+1800d05e7:     	jmp	0x1800d04f1 <dllexec+0x7b1f1>
+1800d05ec:     	cmpl	$0x0, 0x44(%rsp)
+1800d05f1:     	je	0x1800d05f8 <dllexec+0x7b2f8>
+1800d05f3:     	jmp	0x1800cfcff <dllexec+0x7a9ff>
+1800d05f8:     	movl	0x50(%rsp), %eax
+1800d05fc:     	decl	%eax
+1800d05fe:     	movl	%eax, %eax
+1800d0600:     	leaq	0x122cf29(%rip), %rcx   # 0x1812fd530
+1800d0607:     	movzbl	(%rcx,%rax), %eax
+1800d060b:     	andl	$0x8, %eax
+1800d060e:     	testl	%eax, %eax
+1800d0610:     	je	0x1800d071e <dllexec+0x7b41e>
+1800d0616:     	movl	0x50(%rsp), %eax
+1800d061a:     	incl	%eax
+1800d061c:     	movl	%eax, 0x20(%rsp)
+1800d0620:     	movl	0x1221962(%rip), %eax   # 0x1812f1f88
+1800d0626:     	cmpl	%eax, 0x20(%rsp)
+1800d062a:     	jae	0x1800d0710 <dllexec+0x7b410>
+1800d0630:     	movl	0x20(%rsp), %eax
+1800d0634:     	decl	%eax
+1800d0636:     	movl	%eax, %eax
+1800d0638:     	leaq	0x122cef1(%rip), %rcx   # 0x1812fd530
+1800d063f:     	movzbl	(%rcx,%rax), %eax
+1800d0643:     	andl	$0x2, %eax
+1800d0646:     	testl	%eax, %eax
+1800d0648:     	je	0x1800d0662 <dllexec+0x7b362>
+1800d064a:     	movl	0x20(%rsp), %eax
+1800d064e:     	decl	%eax
+1800d0650:     	movl	%eax, %eax
+1800d0652:     	leaq	0x122ced7(%rip), %rcx   # 0x1812fd530
+1800d0659:     	movzbl	(%rcx,%rax), %eax
+1800d065d:     	cmpl	$0x7, %eax
+1800d0660:     	jne	0x1800d06c4 <dllexec+0x7b3c4>
+1800d0662:     	movl	0x20(%rsp), %eax
+1800d0666:     	leaq	0x122cec3(%rip), %rcx   # 0x1812fd530
+1800d066d:     	movzbl	(%rcx,%rax), %eax
+1800d0671:     	andl	$0x1, %eax
+1800d0674:     	testl	%eax, %eax
+1800d0676:     	jne	0x1800d06c4 <dllexec+0x7b3c4>
+1800d0678:     	movl	0x20(%rsp), %eax
+1800d067c:     	decl	%eax
+1800d067e:     	movl	%eax, %eax
+1800d0680:     	leaq	0x122cea9(%rip), %rcx   # 0x1812fd530
+1800d0687:     	movb	$0x7, (%rcx,%rax)
+1800d068b:     	movl	0x34(%rsp), %eax
+1800d068f:     	leaq	0x123280a(%rip), %rcx   # 0x181302ea0
+1800d0696:     	movl	0x24(%rsp), %edx
+1800d069a:     	leaq	0x121cb2f(%rip), %rdi   # 0x1812ed1d0
+1800d06a1:     	movzbl	(%rcx,%rax), %eax
+1800d06a5:     	movb	%al, (%rdi,%rdx)
+1800d06a8:     	movl	0x24(%rsp), %eax
+1800d06ac:     	incl	%eax
+1800d06ae:     	movl	%eax, 0x24(%rsp)
+1800d06b2:     	movl	0x3c(%rsp), %eax
+1800d06b6:     	movl	%eax, 0x30(%rsp)
+1800d06ba:     	movl	$0x1, 0x44(%rsp)
+1800d06c2:     	jmp	0x1800d0710 <dllexec+0x7b410>
+1800d06c4:     	movl	0x20(%rsp), %eax
+1800d06c8:     	decl	%eax
+1800d06ca:     	movl	%eax, %eax
+1800d06cc:     	leaq	0x122ce5d(%rip), %rcx   # 0x1812fd530
+1800d06d3:     	movzbl	(%rcx,%rax), %eax
+1800d06d7:     	andl	$0x10, %eax
+1800d06da:     	testl	%eax, %eax
+1800d06dc:     	jne	0x1800d0701 <dllexec+0x7b401>
+1800d06de:     	movl	0x20(%rsp), %eax
+1800d06e2:     	leal	-0x2(,%rax,4), %eax
+1800d06e9:     	movl	%eax, %eax
+1800d06eb:     	leaq	0x122350e(%rip), %rcx   # 0x1812f3c00
+1800d06f2:     	movl	(%rcx,%rax,4), %eax
+1800d06f5:     	movl	0x2c(%rsp), %ecx
+1800d06f9:     	addl	%eax, %ecx
+1800d06fb:     	movl	%ecx, %eax
+1800d06fd:     	movl	%eax, 0x2c(%rsp)
+1800d0701:     	movl	0x20(%rsp), %eax
+1800d0705:     	incl	%eax
+1800d0707:     	movl	%eax, 0x20(%rsp)
+1800d070b:     	jmp	0x1800d0620 <dllexec+0x7b320>
+1800d0710:     	cmpl	$0x0, 0x44(%rsp)
+1800d0715:     	je	0x1800d071c <dllexec+0x7b41c>
+1800d0717:     	jmp	0x1800cfcff <dllexec+0x7a9ff>
+1800d071c:     	jmp	0x1800d0758 <dllexec+0x7b458>
+1800d071e:     	movl	0x50(%rsp), %eax
+1800d0722:     	decl	%eax
+1800d0724:     	movl	%eax, %eax
+1800d0726:     	leaq	0x122ce03(%rip), %rcx   # 0x1812fd530
+1800d072d:     	movb	$0x7, (%rcx,%rax)
+1800d0731:     	movl	0x34(%rsp), %eax
+1800d0735:     	leaq	0x1232764(%rip), %rcx   # 0x181302ea0
+1800d073c:     	movl	0x24(%rsp), %edx
+1800d0740:     	leaq	0x121ca89(%rip), %rdi   # 0x1812ed1d0
+1800d0747:     	movzbl	(%rcx,%rax), %eax
+1800d074b:     	movb	%al, (%rdi,%rdx)
+1800d074e:     	movl	0x24(%rsp), %eax
+1800d0752:     	incl	%eax
+1800d0754:     	movl	%eax, 0x24(%rsp)
+1800d0758:     	movl	0x3c(%rsp), %eax
+1800d075c:     	movl	%eax, 0x30(%rsp)
+1800d0760:     	jmp	0x1800d07f7 <dllexec+0x7b4f7>
+1800d0765:     	movl	0x20(%rsp), %eax
+1800d0769:     	leaq	0x122cdc0(%rip), %rcx   # 0x1812fd530
+1800d0770:     	movzbl	(%rcx,%rax), %eax
+1800d0774:     	cmpl	$0x7, %eax
+1800d0777:     	jne	0x1800d07b4 <dllexec+0x7b4b4>
+1800d0779:     	movl	0x3c(%rsp), %eax
+1800d077d:     	movl	%eax, 0x30(%rsp)
+1800d0781:     	movl	0x34(%rsp), %eax
+1800d0785:     	leaq	0x1232714(%rip), %rcx   # 0x181302ea0
+1800d078c:     	movl	0x24(%rsp), %edx
+1800d0790:     	leaq	0x121ca39(%rip), %rdi   # 0x1812ed1d0
+1800d0797:     	movzbl	(%rcx,%rax), %eax
+1800d079b:     	movb	%al, (%rdi,%rdx)
+1800d079e:     	movl	0x34(%rsp), %eax
+1800d07a2:     	incl	%eax
+1800d07a4:     	movl	%eax, 0x34(%rsp)
+1800d07a8:     	movl	0x24(%rsp), %eax
+1800d07ac:     	incl	%eax
+1800d07ae:     	movl	%eax, 0x24(%rsp)
+1800d07b2:     	jmp	0x1800d07ed <dllexec+0x7b4ed>
+1800d07b4:     	movl	0x20(%rsp), %eax
+1800d07b8:     	leaq	0x122cd71(%rip), %rcx   # 0x1812fd530
+1800d07bf:     	movzbl	(%rcx,%rax), %eax
+1800d07c3:     	andl	$0x10, %eax
+1800d07c6:     	testl	%eax, %eax
+1800d07c8:     	jne	0x1800d07ed <dllexec+0x7b4ed>
+1800d07ca:     	movl	0x20(%rsp), %eax
+1800d07ce:     	leal	0x2(,%rax,4), %eax
+1800d07d5:     	movl	%eax, %eax
+1800d07d7:     	leaq	0x1223422(%rip), %rcx   # 0x1812f3c00
+1800d07de:     	movl	(%rcx,%rax,4), %eax
+1800d07e1:     	movl	0x30(%rsp), %ecx
+1800d07e5:     	addl	%eax, %ecx
+1800d07e7:     	movl	%ecx, %eax
+1800d07e9:     	movl	%eax, 0x30(%rsp)
+1800d07ed:     	movl	0x20(%rsp), %eax
+1800d07f1:     	incl	%eax
+1800d07f3:     	movl	%eax, 0x20(%rsp)
+1800d07f7:     	jmp	0x1800cfcff <dllexec+0x7a9ff>
+1800d07fc:     	movl	0x34(%rsp), %eax
+1800d0800:     	leaq	0x1232699(%rip), %rcx   # 0x181302ea0
+1800d0807:     	movl	0x24(%rsp), %edx
+1800d080b:     	leaq	0x121c9be(%rip), %rdi   # 0x1812ed1d0
+1800d0812:     	movzbl	(%rcx,%rax), %eax
+1800d0816:     	movb	%al, (%rdi,%rdx)
+1800d0819:     	cmpl	$0x0, 0x1221768(%rip)   # 0x1812f1f88
+1800d0820:     	je	0x1800d0888 <dllexec+0x7b588>
+1800d0822:     	movl	0x1221760(%rip), %eax   # 0x1812f1f88
+1800d0828:     	decl	%eax
+1800d082a:     	movl	%eax, %eax
+1800d082c:     	leaq	0x122ccfd(%rip), %rcx   # 0x1812fd530
+1800d0833:     	movzbl	(%rcx,%rax), %eax
+1800d0837:     	cmpl	$0x7, %eax
+1800d083a:     	jne	0x1800d0888 <dllexec+0x7b588>
+1800d083c:     	movl	0x1221746(%rip), %eax   # 0x1812f1f88
+1800d0842:     	decl	%eax
+1800d0844:     	movl	%eax, %eax
+1800d0846:     	leaq	0x122d943(%rip), %rcx   # 0x1812fe190
+1800d084d:     	cmpl	$0x80000000, (%rcx,%rax,4) # imm = 0x80000000
+1800d0854:     	je	0x1800d0888 <dllexec+0x7b588>
+1800d0856:     	movl	0x122172c(%rip), %eax   # 0x1812f1f88
+1800d085c:     	decl	%eax
+1800d085e:     	movl	%eax, %eax
+1800d0860:     	movq	%rax, 0x78(%rsp)
+1800d0865:     	cmpq	$0x960, 0x78(%rsp)      # imm = 0x960
+1800d086e:     	jae	0x1800d0872 <dllexec+0x7b572>
+1800d0870:     	jmp	0x1800d0878 <dllexec+0x7b578>
+1800d0872:     	callq	0x1801cc4a0 <dllexec+0x1771a0>
+1800d0877:     	nop
+1800d0878:     	leaq	0x122ccb1(%rip), %rax   # 0x1812fd530
+1800d087f:     	movq	0x78(%rsp), %rcx
+1800d0884:     	movb	$0x0, (%rax,%rcx)
+1800d0888:     	movq	0x1c8(%rsp), %rcx
+1800d0890:     	xorq	%rsp, %rcx
+1800d0893:     	callq	0x1801cbf30 <dllexec+0x176c30>
+1800d0898:     	addq	$0x1d0, %rsp            # imm = 0x1D0
+1800d089f:     	popq	%rdi
+1800d08a0:     	retq

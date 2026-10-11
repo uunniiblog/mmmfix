@@ -1,0 +1,244 @@
+{
+  "May": {
+    "file": "MyMerryMay_WIN_Master.dll",
+    "sha256": "8159e7e25e0be3fe67510e5bd0a58773fa0eb11c1dd592fbccaf62801db9c340",
+    "wrap_candidate_rva": "0xcfc70",
+    "call_sites": [
+      {
+        "instruction": "1800d09b5:     \tcallq\t0x1800cfc70 <dllexec+0x7a970>",
+        "context": [
+          "1800d097f:     \tmovl\t0x3c(%rsp), %ecx",
+          "1800d0983:     \tcallq\t0x1800cf770 <dllexec+0x7a470>",
+          "1800d0988:     \tmovl\t0x70(%rsp), %eax",
+          "1800d098c:     \timulq\t$0x30, %rax, %rax",
+          "1800d0990:     \tleaq\t0x12185a9(%rip), %rcx   # 0x1812e8f40",
+          "1800d0997:     \tmovswl\t0x4(%rcx,%rax), %eax",
+          "1800d099c:     \tmovl\t0x70(%rsp), %ecx",
+          "1800d09a0:     \timulq\t$0x30, %rcx, %rcx",
+          "1800d09a4:     \tleaq\t0x1218595(%rip), %rdx   # 0x1812e8f40",
+          "1800d09ab:     \tmovzwl\t0x14(%rdx,%rcx), %ecx",
+          "1800d09b0:     \txorl\t%r8d, %r8d",
+          "1800d09b3:     \tmovl\t%eax, %edx",
+          "1800d09b5:     \tcallq\t0x1800cfc70 <dllexec+0x7a970>",
+          "1800d09ba:     \tnop"
+        ]
+      },
+      {
+        "instruction": "1800d19af:     \tcallq\t0x1800cfc70 <dllexec+0x7a970>",
+        "context": [
+          "1800d1977:     \tmovl\t0x30(%rsp), %ecx",
+          "1800d197b:     \tcallq\t0x1800cf770 <dllexec+0x7a470>",
+          "1800d1980:     \tmovl\t$0x30, %eax",
+          "1800d1985:     \timulq\t$0x6, %rax, %rax",
+          "1800d1989:     \tleaq\t0x12175b0(%rip), %rcx   # 0x1812e8f40",
+          "1800d1990:     \tmovswl\t0x4(%rcx,%rax), %eax",
+          "1800d1995:     \tmovl\t$0x30, %ecx",
+          "1800d199a:     \timulq\t$0x6, %rcx, %rcx",
+          "1800d199e:     \tleaq\t0x121759b(%rip), %rdx   # 0x1812e8f40",
+          "1800d19a5:     \tmovzwl\t0x14(%rdx,%rcx), %ecx",
+          "1800d19aa:     \txorl\t%r8d, %r8d",
+          "1800d19ad:     \tmovl\t%eax, %edx",
+          "1800d19af:     \tcallq\t0x1800cfc70 <dllexec+0x7a970>",
+          "1800d19b4:     \tmovl\t$0x6, %ecx"
+        ]
+      },
+      {
+        "instruction": "1800d2c5a:     \tcallq\t0x1800cfc70 <dllexec+0x7a970>",
+        "context": [
+          "1800d2c22:     \tmovl\t0x30(%rsp), %ecx",
+          "1800d2c26:     \tcallq\t0x1800cf770 <dllexec+0x7a470>",
+          "1800d2c2b:     \tmovl\t$0x30, %eax",
+          "1800d2c30:     \timulq\t$0x6, %rax, %rax",
+          "1800d2c34:     \tleaq\t0x1216305(%rip), %rcx   # 0x1812e8f40",
+          "1800d2c3b:     \tmovswl\t0x4(%rcx,%rax), %eax",
+          "1800d2c40:     \tmovl\t$0x30, %ecx",
+          "1800d2c45:     \timulq\t$0x6, %rcx, %rcx",
+          "1800d2c49:     \tleaq\t0x12162f0(%rip), %rdx   # 0x1812e8f40",
+          "1800d2c50:     \tmovzwl\t0x14(%rdx,%rcx), %ecx",
+          "1800d2c55:     \txorl\t%r8d, %r8d",
+          "1800d2c58:     \tmovl\t%eax, %edx",
+          "1800d2c5a:     \tcallq\t0x1800cfc70 <dllexec+0x7a970>",
+          "1800d2c5f:     \tmovl\t$0x6, %ecx"
+        ]
+      },
+      {
+        "instruction": "1800d43b9:     \tcallq\t0x1800cfc70 <dllexec+0x7a970>",
+        "context": [
+          "1800d4389:     \tjmp\t0x1800d4393 <dllexec+0x7f093>",
+          "1800d438b:     \tmovl\t$0x0, 0x34(%rsp)",
+          "1800d4393:     \txorl\t%edx, %edx",
+          "1800d4395:     \tmovl\t0x34(%rsp), %ecx",
+          "1800d4399:     \tcallq\t0x1800cf770 <dllexec+0x7a470>",
+          "1800d439e:     \tmovl\t0x30(%rsp), %eax",
+          "1800d43a2:     \timulq\t$0x30, %rax, %rax",
+          "1800d43a6:     \tleaq\t0x1214b93(%rip), %rcx   # 0x1812e8f40",
+          "1800d43ad:     \tmovzwl\t0x14(%rcx,%rax), %eax",
+          "1800d43b2:     \txorl\t%r8d, %r8d",
+          "1800d43b5:     \txorl\t%edx, %edx",
+          "1800d43b7:     \tmovl\t%eax, %ecx",
+          "1800d43b9:     \tcallq\t0x1800cfc70 <dllexec+0x7a970>",
+          "1800d43be:     \tmovl\t0x60(%rsp), %edx"
+        ]
+      },
+      {
+        "instruction": "1800d44e7:     \tcallq\t0x1800cfc70 <dllexec+0x7a970>",
+        "context": [
+          "1800d44b7:     \tjmp\t0x1800d44c1 <dllexec+0x7f1c1>",
+          "1800d44b9:     \tmovl\t$0x0, 0x38(%rsp)",
+          "1800d44c1:     \txorl\t%edx, %edx",
+          "1800d44c3:     \tmovl\t0x38(%rsp), %ecx",
+          "1800d44c7:     \tcallq\t0x1800cf770 <dllexec+0x7a470>",
+          "1800d44cc:     \tmovl\t0x30(%rsp), %eax",
+          "1800d44d0:     \timulq\t$0x30, %rax, %rax",
+          "1800d44d4:     \tleaq\t0x1214a65(%rip), %rcx   # 0x1812e8f40",
+          "1800d44db:     \tmovzwl\t0x14(%rcx,%rax), %eax",
+          "1800d44e0:     \txorl\t%r8d, %r8d",
+          "1800d44e3:     \txorl\t%edx, %edx",
+          "1800d44e5:     \tmovl\t%eax, %ecx",
+          "1800d44e7:     \tcallq\t0x1800cfc70 <dllexec+0x7a970>",
+          "1800d44ec:     \tmovl\t0x30(%rsp), %ecx"
+        ]
+      },
+      {
+        "instruction": "1800d45b8:     \tcallq\t0x1800cfc70 <dllexec+0x7a970>",
+        "context": [
+          "1800d4588:     \tjmp\t0x1800d4592 <dllexec+0x7f292>",
+          "1800d458a:     \tmovl\t$0x0, 0x34(%rsp)",
+          "1800d4592:     \tmovb\t$0x1, %dl",
+          "1800d4594:     \tmovl\t0x34(%rsp), %ecx",
+          "1800d4598:     \tcallq\t0x1800cf770 <dllexec+0x7a470>",
+          "1800d459d:     \tmovl\t0x30(%rsp), %eax",
+          "1800d45a1:     \timulq\t$0x30, %rax, %rax",
+          "1800d45a5:     \tleaq\t0x1214994(%rip), %rcx   # 0x1812e8f40",
+          "1800d45ac:     \tmovzwl\t0x14(%rcx,%rax), %eax",
+          "1800d45b1:     \txorl\t%r8d, %r8d",
+          "1800d45b4:     \txorl\t%edx, %edx",
+          "1800d45b6:     \tmovl\t%eax, %ecx",
+          "1800d45b8:     \tcallq\t0x1800cfc70 <dllexec+0x7a970>",
+          "1800d45bd:     \tmovl\t0x30(%rsp), %ecx"
+        ]
+      }
+    ]
+  },
+  "Maybe": {
+    "file": "MyMerryMaybe_WIN_Master.dll",
+    "sha256": "b1158a2d76aeb0cc6e70578b16e66afd7ed3364274abd01020e995224d665d20",
+    "wrap_candidate_rva": "0xcfe80",
+    "call_sites": [
+      {
+        "instruction": "1800d0bc5:     \tcallq\t0x1800cfe80 <dllexec+0x7a250>",
+        "context": [
+          "1800d0b8f:     \tmovl\t0x3c(%rsp), %ecx",
+          "1800d0b93:     \tcallq\t0x1800cf980 <dllexec+0x79d50>",
+          "1800d0b98:     \tmovl\t0x70(%rsp), %eax",
+          "1800d0b9c:     \timulq\t$0x30, %rax, %rax",
+          "1800d0ba0:     \tleaq\t0x12193d9(%rip), %rcx   # 0x1812e9f80",
+          "1800d0ba7:     \tmovswl\t0x4(%rcx,%rax), %eax",
+          "1800d0bac:     \tmovl\t0x70(%rsp), %ecx",
+          "1800d0bb0:     \timulq\t$0x30, %rcx, %rcx",
+          "1800d0bb4:     \tleaq\t0x12193c5(%rip), %rdx   # 0x1812e9f80",
+          "1800d0bbb:     \tmovzwl\t0x14(%rdx,%rcx), %ecx",
+          "1800d0bc0:     \txorl\t%r8d, %r8d",
+          "1800d0bc3:     \tmovl\t%eax, %edx",
+          "1800d0bc5:     \tcallq\t0x1800cfe80 <dllexec+0x7a250>",
+          "1800d0bca:     \tnop"
+        ]
+      },
+      {
+        "instruction": "1800d1bbf:     \tcallq\t0x1800cfe80 <dllexec+0x7a250>",
+        "context": [
+          "1800d1b87:     \tmovl\t0x30(%rsp), %ecx",
+          "1800d1b8b:     \tcallq\t0x1800cf980 <dllexec+0x79d50>",
+          "1800d1b90:     \tmovl\t$0x30, %eax",
+          "1800d1b95:     \timulq\t$0x6, %rax, %rax",
+          "1800d1b99:     \tleaq\t0x12183e0(%rip), %rcx   # 0x1812e9f80",
+          "1800d1ba0:     \tmovswl\t0x4(%rcx,%rax), %eax",
+          "1800d1ba5:     \tmovl\t$0x30, %ecx",
+          "1800d1baa:     \timulq\t$0x6, %rcx, %rcx",
+          "1800d1bae:     \tleaq\t0x12183cb(%rip), %rdx   # 0x1812e9f80",
+          "1800d1bb5:     \tmovzwl\t0x14(%rdx,%rcx), %ecx",
+          "1800d1bba:     \txorl\t%r8d, %r8d",
+          "1800d1bbd:     \tmovl\t%eax, %edx",
+          "1800d1bbf:     \tcallq\t0x1800cfe80 <dllexec+0x7a250>",
+          "1800d1bc4:     \tmovl\t$0x6, %ecx"
+        ]
+      },
+      {
+        "instruction": "1800d2e6a:     \tcallq\t0x1800cfe80 <dllexec+0x7a250>",
+        "context": [
+          "1800d2e32:     \tmovl\t0x30(%rsp), %ecx",
+          "1800d2e36:     \tcallq\t0x1800cf980 <dllexec+0x79d50>",
+          "1800d2e3b:     \tmovl\t$0x30, %eax",
+          "1800d2e40:     \timulq\t$0x6, %rax, %rax",
+          "1800d2e44:     \tleaq\t0x1217135(%rip), %rcx   # 0x1812e9f80",
+          "1800d2e4b:     \tmovswl\t0x4(%rcx,%rax), %eax",
+          "1800d2e50:     \tmovl\t$0x30, %ecx",
+          "1800d2e55:     \timulq\t$0x6, %rcx, %rcx",
+          "1800d2e59:     \tleaq\t0x1217120(%rip), %rdx   # 0x1812e9f80",
+          "1800d2e60:     \tmovzwl\t0x14(%rdx,%rcx), %ecx",
+          "1800d2e65:     \txorl\t%r8d, %r8d",
+          "1800d2e68:     \tmovl\t%eax, %edx",
+          "1800d2e6a:     \tcallq\t0x1800cfe80 <dllexec+0x7a250>",
+          "1800d2e6f:     \tmovl\t$0x6, %ecx"
+        ]
+      },
+      {
+        "instruction": "1800d45c9:     \tcallq\t0x1800cfe80 <dllexec+0x7a250>",
+        "context": [
+          "1800d4599:     \tjmp\t0x1800d45a3 <dllexec+0x7e973>",
+          "1800d459b:     \tmovl\t$0x0, 0x34(%rsp)",
+          "1800d45a3:     \txorl\t%edx, %edx",
+          "1800d45a5:     \tmovl\t0x34(%rsp), %ecx",
+          "1800d45a9:     \tcallq\t0x1800cf980 <dllexec+0x79d50>",
+          "1800d45ae:     \tmovl\t0x30(%rsp), %eax",
+          "1800d45b2:     \timulq\t$0x30, %rax, %rax",
+          "1800d45b6:     \tleaq\t0x12159c3(%rip), %rcx   # 0x1812e9f80",
+          "1800d45bd:     \tmovzwl\t0x14(%rcx,%rax), %eax",
+          "1800d45c2:     \txorl\t%r8d, %r8d",
+          "1800d45c5:     \txorl\t%edx, %edx",
+          "1800d45c7:     \tmovl\t%eax, %ecx",
+          "1800d45c9:     \tcallq\t0x1800cfe80 <dllexec+0x7a250>",
+          "1800d45ce:     \tmovl\t0x60(%rsp), %edx"
+        ]
+      },
+      {
+        "instruction": "1800d46f7:     \tcallq\t0x1800cfe80 <dllexec+0x7a250>",
+        "context": [
+          "1800d46c7:     \tjmp\t0x1800d46d1 <dllexec+0x7eaa1>",
+          "1800d46c9:     \tmovl\t$0x0, 0x38(%rsp)",
+          "1800d46d1:     \txorl\t%edx, %edx",
+          "1800d46d3:     \tmovl\t0x38(%rsp), %ecx",
+          "1800d46d7:     \tcallq\t0x1800cf980 <dllexec+0x79d50>",
+          "1800d46dc:     \tmovl\t0x30(%rsp), %eax",
+          "1800d46e0:     \timulq\t$0x30, %rax, %rax",
+          "1800d46e4:     \tleaq\t0x1215895(%rip), %rcx   # 0x1812e9f80",
+          "1800d46eb:     \tmovzwl\t0x14(%rcx,%rax), %eax",
+          "1800d46f0:     \txorl\t%r8d, %r8d",
+          "1800d46f3:     \txorl\t%edx, %edx",
+          "1800d46f5:     \tmovl\t%eax, %ecx",
+          "1800d46f7:     \tcallq\t0x1800cfe80 <dllexec+0x7a250>",
+          "1800d46fc:     \tmovl\t0x30(%rsp), %ecx"
+        ]
+      },
+      {
+        "instruction": "1800d47c8:     \tcallq\t0x1800cfe80 <dllexec+0x7a250>",
+        "context": [
+          "1800d4798:     \tjmp\t0x1800d47a2 <dllexec+0x7eb72>",
+          "1800d479a:     \tmovl\t$0x0, 0x34(%rsp)",
+          "1800d47a2:     \tmovb\t$0x1, %dl",
+          "1800d47a4:     \tmovl\t0x34(%rsp), %ecx",
+          "1800d47a8:     \tcallq\t0x1800cf980 <dllexec+0x79d50>",
+          "1800d47ad:     \tmovl\t0x30(%rsp), %eax",
+          "1800d47b1:     \timulq\t$0x30, %rax, %rax",
+          "1800d47b5:     \tleaq\t0x12157c4(%rip), %rcx   # 0x1812e9f80",
+          "1800d47bc:     \tmovzwl\t0x14(%rcx,%rax), %eax",
+          "1800d47c1:     \txorl\t%r8d, %r8d",
+          "1800d47c4:     \txorl\t%edx, %edx",
+          "1800d47c6:     \tmovl\t%eax, %ecx",
+          "1800d47c8:     \tcallq\t0x1800cfe80 <dllexec+0x7a250>",
+          "1800d47cd:     \tmovl\t0x30(%rsp), %ecx"
+        ]
+      }
+    ]
+  }
+}

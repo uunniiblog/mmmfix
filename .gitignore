@@ -1,0 +1,47 @@
+# CMake and Ninja build output
+/build/
+/build-*/
+/out/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CTestTestfile.cmake
+build.ninja
+.ninja_*
+compile_commands.json
+Testing/
+
+# Compiled binaries and debug artifacts
+*.dll
+*.exe
+*.exp
+*.ilk
+*.lib
+*.a
+*.o
+*.obj
+*.pdb
+
+# Downloaded local compiler toolchains
+/toolchain/
+*.zip
+
+# Runtime and diagnostic output
+*.log
+/diagnostics/*.msb
+/diagnostics/*.scx
+/diagnostics/*.png
+/diagnostics/*-disassembly.txt
+/diagnostics/sc3tools-*
+
+# IDE, editor, and operating-system files
+/.vs/
+/.vscode/
+/.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*~
+.DS_Store
+Thumbs.db
