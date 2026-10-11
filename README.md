@@ -2,7 +2,7 @@
 
 [日本語版 README](README.ja.md)
 
-Vibe coded proxy fix for the PC port of My Merry May With Be adding 4:3 original aspect ratio and basic QOL features the engine misses. 
+Vibe coded proxy fix for the PC port of **My Merry May With Be** adding 4:3 original aspect ratio and basic QOL features the engine misses. 
 All CGs and BGs are heavily cropped in this remaster version of the game to fit into 16:9 aspect ratio, but original files are still in the game assets.
 Comes with a configurable .ini and a in game overlay to change settings in real time.
 
@@ -30,7 +30,7 @@ the game's D3D11 swap chain, and displays a small diagnostic overlay.
 
 ## Install
 
-The repository root already contains the two files needed by the game:
+Place these two files in the root of the game's folder:
 
 - `dinput8.dll`
 - `MyMerryMayFix.ini`
