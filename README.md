@@ -49,7 +49,7 @@ that existing value instead of adding a second assignment.
 
 Start the game and press **F12**. Use **Up/Down** to select an option and
 **Left/Right** to change it. Use **Escape** or **F12** to close the overlay.
-Display, sprite, opacity, and tint changes are saved to `MyMerryMayFix.ini`.
+All changes are saved to `MyMerryMayFix.ini`.
 
 While the overlay is open, keyboard, mouse, and DirectInput device state are
 suppressed before they reach the game. This prevents overlay navigation keys
