@@ -103,7 +103,8 @@ including its message-transition copies; AUTO/SKIP, speaker chrome, ADV glyphs,
 NVL, backlog, and system menus retain their original style.
 
 ## Sprites over bars
-Choose if you want the character tachie to go above the black pillarboxes in 4:3 mode.
+`SpritesOverPillarbox=1` (the default) preserves the PC port's extra widescreen
+character art by allowing sprites to extend over the black side regions.
 Disabling it will hide part of the characters so I recommend to leave it on.
 
 ## Voiced text speed
@@ -167,13 +168,6 @@ Improves:
 - Transitions and shader effects rendered into the enlarged intermediate target.
 - Pillarbox edges and positioning precision.
 
-
-`SpritesOverPillarbox=1` (the default) preserves the PC port's extra widescreen
-character art by allowing sprites to extend over the black side regions. Set it
-to `0`, or toggle **Sprites over bars** in the overlay, to composite the black
-bars over character sprites like the original 4:3 release. This does not crop
-or modify the underlying sprite assets.
-
 ## Overlay status
 
 The panel shows whether experimental high-resolution rendering is enabled and,
@@ -185,10 +179,9 @@ that log and screenshots with the overlay open in both story mode and gallery
 mode. For background classification, a screenshot taken while the relevant CG
 is stable is more useful than one taken mid-transition.
 
-The overlay deliberately uses keyboard controls because the game's mouse input
-is one of the later issues this project is intended to fix.
+The overlay uses keyboard arrow keys controls.
 
-## Change the hotkey
+### Change the hotkey
 
 Edit `MyMerryMayFix.ini` while the game is closed:
 
