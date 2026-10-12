@@ -17,11 +17,22 @@ reduces the vertical clip-space extent. Zoom and pan already present in the
 original vertices are retained. Unrecognised geometry passes through without
 an additional transform.
 
-This is **not yet validated across the game**. It is currently limited to
-1920x1440 background textures. Taller animation strips, draws with an existing
-game geometry shader, and any scene whose geometry does not match either
-pattern retain the established fixed-quad path. Leave the option disabled if
-it causes missing backgrounds or a wrong crop.
+For a CG whose 16:9 crop is already close to the top or bottom of the source
+texture, vertical expansion may otherwise sample outside the image and smear
+an edge row. The motion shader shifts such an expanded crop back inside the
+source bounds while preserving its size; camera movement continues until the
+edge of the 4:3 artwork is reached.
+
+This is **not yet validated across the game**. An inventory of the May and
+Maybe `bg.mpk` archives found 692 images at 1920x1440, six at 1920x1441,
+and two at 1920x1439. The motion path covers all three near-4:3 sizes, plus
+the observed 1920x2560 scrolling CG whose 16:9 UV window moves vertically
+through the tall image. The archives also contain other tall sizes (up to
+1920x5400), including animation strips; their frames cannot safely be
+treated as one continuous 4:3 image without scene-specific evidence. Those
+sizes, draws with an existing game geometry shader, and unrecognised geometry
+retain the established fixed-quad path. Leave the option disabled if it
+causes missing backgrounds or a wrong crop.
 
 To test, set these values in `MyMerryMayFix.ini` and restart the game:
 

@@ -1190,7 +1190,13 @@ void STDMETHODCALLTYPE HookDraw(ID3D11DeviceContext* context, UINT vertexCount, 
     ID3D11GeometryShader* originalGeometryShader = nullptr;
     ID3D11GeometryShader* replacementGeometryShader = nullptr;
     if (backgroundCorrected && vertexCount == 4 && topology == D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP) {
-        if (g_experimentalBackgroundMotion.load() && TextureHeight(0).load() == 1440) {
+        const UINT backgroundHeight = TextureHeight(0).load();
+        // The background archives also contain 1439- and 1441-pixel variants
+        // of the nominal 1920x1440 art. Other tall sizes may be frame atlases;
+        // only the 2560-pixel scrolling CG has been confirmed as continuous.
+        const bool fourThreeArtwork = backgroundHeight >= 1439 && backgroundHeight <= 1441;
+        if (g_experimentalBackgroundMotion.load() &&
+            (fourThreeArtwork || backgroundHeight == 2560)) {
             ID3D11GeometryShader* gameGeometryShader = nullptr;
             context->GSGetShader(&gameGeometryShader, nullptr, nullptr);
             if (!gameGeometryShader) {
@@ -1572,11 +1578,27 @@ void BackgroundMotionGS(triangle Output input[3], inout TriangleStream<Output> s
     float2 posMax = max(pos0, max(pos1, pos2));
     float uvRatio = (uvMax.y - uvMin.y) / max(uvMax.x - uvMin.x, 0.0001);
     float posRatio = (posMax.y - posMin.y) / max(posMax.x - posMin.x, 0.0001);
-    bool uvCropped = uvRatio > 0.68 && uvRatio < 0.82;
+    // 1920x1440 backgrounds use about 0.75; the verified 1920x2560 CG
+    // scroll uses 1080/2560 = 0.421875. Both are 16:9 source windows that
+    // need the same vertical expansion inside a 4:3 viewport.
+    bool uvCropped = uvRatio > 0.38 && uvRatio < 0.82;
     bool geometryCropped = !uvCropped && posRatio > 1.20 && posRatio < 1.48;
+    // A vertically panned CG can start near a texture edge. Expanding about
+    // 0.5 alone then samples outside [0,1], stretching the edge texels into
+    // a visible band. Shift the expanded view back into the source image;
+    // keep the same shift for every vertex of this triangle.
+    float uvShiftY = 0.0;
+    if (uvCropped) {
+        float expandedMinY = 0.5 + (uvMin.y - 0.5) * (4.0 / 3.0);
+        float expandedMaxY = 0.5 + (uvMax.y - 0.5) * (4.0 / 3.0);
+        if (expandedMaxY - expandedMinY <= 1.0001) {
+            if (expandedMinY < 0.0) uvShiftY = -expandedMinY;
+            else if (expandedMaxY > 1.0) uvShiftY = 1.0 - expandedMaxY;
+        }
+    }
     [unroll] for (uint i = 0; i < 3; ++i) {
         Output o = input[i];
-        if (uvCropped) o.uv.y = 0.5 + (o.uv.y - 0.5) * (4.0 / 3.0);
+        if (uvCropped) o.uv.y = 0.5 + (o.uv.y - 0.5) * (4.0 / 3.0) + uvShiftY;
         else if (geometryCropped) o.position.y *= 0.75;
         stream.Append(o);
     }
