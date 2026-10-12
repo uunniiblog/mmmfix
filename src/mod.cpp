@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <climits>
 #include <cstdarg>
 #include <cstdint>
 #include <cstdio>
@@ -60,6 +61,8 @@ std::atomic<bool> g_overlayVisible{false};
 std::atomic<LONG> g_aspectMode{static_cast<LONG>(AspectMode::Off)};
 std::atomic<UINT> g_hotkey{VK_F12};
 std::atomic<bool> g_logging{true};
+std::atomic<bool> g_backgroundMotionDiagnostics{false};
+std::atomic<bool> g_experimentalBackgroundMotion{false};
 std::atomic<bool> g_spritesOverPillarbox{true};
 std::atomic<LONG> g_overlaySelection{0};
 std::atomic<bool> g_restoreCursor{true};
@@ -149,9 +152,12 @@ ResizeBuffersFn g_originalResizeBuffers = nullptr;
 CreateDeferredContextFn g_originalCreateDeferredContext = nullptr;
 CreateTexture2DFn g_originalCreateTexture2D = nullptr;
 std::atomic<unsigned> g_candidateLogCount{0};
+std::atomic<unsigned> g_backgroundMotionLogCount{0};
+std::atomic<ULONGLONG> g_backgroundMotionLastLogTick{0};
 std::atomic<unsigned> g_uiLogCount{0};
 std::atomic<unsigned> g_geometryLogMask{0};
 std::atomic<ID3D11VertexShader*> g_backgroundVertexShader{nullptr};
+std::atomic<ID3D11GeometryShader*> g_backgroundMotionGeometryShader{nullptr};
 std::atomic<ID3D11VertexShader*> g_nvlFontVertexShader{nullptr};
 std::atomic<ID3D11InputLayout*> g_nvlFontInputLayout{nullptr};
 std::atomic<ID3D11GeometryShader*> g_nativeNvlGeometryShader{nullptr};
@@ -295,6 +301,8 @@ void LoadConfiguration() {
                                  : static_cast<LONG>(AspectMode::Pillarbox));
     g_spritesOverPillarbox.store(
         GetPrivateProfileIntW(L"Graphics", L"SpritesOverPillarbox", 1, g_iniPath.c_str()) != 0);
+    g_experimentalBackgroundMotion.store(GetPrivateProfileIntW(
+        L"Graphics", L"ExperimentalBackgroundMotion", 0, g_iniPath.c_str()) != 0);
     g_textboxOpacity.store(std::clamp(static_cast<LONG>(
         GetPrivateProfileIntW(L"Graphics", L"TextboxOpacity", 100, g_iniPath.c_str())), 0L, 200L));
     g_textboxColorR.store(std::clamp(static_cast<LONG>(
@@ -328,12 +336,16 @@ void LoadConfiguration() {
         }
     }
     g_logging.store(GetPrivateProfileIntW(L"Debug", L"Logging", 1, g_iniPath.c_str()) != 0);
+    g_backgroundMotionDiagnostics.store(GetPrivateProfileIntW(
+        L"Debug", L"BackgroundMotionDiagnostics", 0, g_iniPath.c_str()) != 0);
     g_wrapEnabled = GetPrivateProfileIntW(L"ExperimentalWrapping", L"Enabled", 0, g_iniPath.c_str()) != 0;
     const int width = GetPrivateProfileIntW(L"ExperimentalWrapping", L"Width", 1320, g_iniPath.c_str());
     const int caller = GetPrivateProfileIntW(L"ExperimentalWrapping", L"Caller", 0, g_iniPath.c_str());
     // Zero width is an observation-only mode. Reject malformed values.
     g_wrapWidth = width >= 0 && width <= 65535 ? static_cast<UINT>(width) : 0;
     g_wrapCaller = caller >= 0 && caller <= 6 ? static_cast<UINT>(caller) : 7;
+    Log("Background motion experiment=%d diagnostics=%d",
+        g_experimentalBackgroundMotion.load(), g_backgroundMotionDiagnostics.load());
 }
 
 #include "experimental_wrapping.inl"
@@ -629,7 +641,8 @@ HRESULT STDMETHODCALLTYPE HookMap(ID3D11DeviceContext* context, ID3D11Resource* 
 void STDMETHODCALLTYPE HookUnmap(ID3D11DeviceContext* context, ID3D11Resource* resource,
                                  UINT subresource) {
     if (subresource == 0 && g_activeMap.resource == resource) {
-        if (g_activeMap.byteWidth >= sizeof(g_bufferSnapshots[0].bytes)) {
+        if (g_activeMap.byteWidth >= sizeof(g_bufferSnapshots[0].bytes) ||
+            (g_backgroundMotionDiagnostics.load() && g_activeMap.byteWidth <= 4096)) {
             SaveBufferSnapshot(resource, g_activeMap.data, g_activeMap.byteWidth);
         }
         g_activeMap = {};
@@ -873,9 +886,10 @@ unsigned UiGeometryClass() {
     return 0u;
 }
 
-void LogBufferFloats(const char* label, ID3D11Buffer* buffer, UINT stride, UINT offset) {
+void LogBufferFloats(const char* label, ID3D11Buffer* buffer, UINT stride, UINT offset,
+                     const char* category = "UI") {
     if (!buffer) {
-        Log("UI geometry %s: none", label);
+        Log("%s geometry %s: none", category, label);
         return;
     }
     D3D11_BUFFER_DESC desc{};
@@ -889,9 +903,9 @@ void LogBufferFloats(const char* label, ID3D11Buffer* buffer, UINT stride, UINT 
         valueCount = available / sizeof(float);
         std::memcpy(values, snapshot.bytes + offset, valueCount * sizeof(float));
     }
-    Log("UI geometry %s=%p bytes=%u usage=%u bind=0x%x cpu=0x%x stride=%u offset=%u snapshot=%d "
+    Log("%s geometry %s=%p bytes=%u usage=%u bind=0x%x cpu=0x%x stride=%u offset=%u snapshot=%d "
         "f=[%.4g,%.4g,%.4g,%.4g,%.4g,%.4g,%.4g,%.4g,%.4g,%.4g,%.4g,%.4g]",
-        label, buffer, desc.ByteWidth, static_cast<unsigned>(desc.Usage), desc.BindFlags,
+        category, label, buffer, desc.ByteWidth, static_cast<unsigned>(desc.Usage), desc.BindFlags,
         desc.CPUAccessFlags, stride, offset, captured ? 1 : 0,
         valueCount > 0 ? values[0] : 0.0f, valueCount > 1 ? values[1] : 0.0f,
         valueCount > 2 ? values[2] : 0.0f, valueCount > 3 ? values[3] : 0.0f,
@@ -906,11 +920,62 @@ void LogBufferFloats(const char* label, ID3D11Buffer* buffer, UINT stride, UINT 
             const UINT fieldCount = std::min<UINT>(stride / sizeof(float), 9);
             std::memcpy(fields, snapshot.bytes + offset + vertex * stride,
                         fieldCount * sizeof(float));
-            Log("UI geometry %s vertex%u f=[%.7g,%.7g,%.7g,%.7g,%.7g,%.7g,%.7g,%.7g,%.7g]",
-                label, vertex, fields[0], fields[1], fields[2], fields[3], fields[4],
+            Log("%s geometry %s vertex%u f=[%.7g,%.7g,%.7g,%.7g,%.7g,%.7g,%.7g,%.7g,%.7g]",
+                category, label, vertex, fields[0], fields[1], fields[2], fields[3], fields[4],
                 fields[5], fields[6], fields[7], fields[8]);
         }
     }
+}
+
+void LogBackgroundMotionGeometry(ID3D11DeviceContext* context, UINT vertexCount,
+                                 UINT startVertex, D3D11_PRIMITIVE_TOPOLOGY topology) {
+    if (!g_logging.load() || !g_backgroundMotionDiagnostics.load() || vertexCount != 4 ||
+        topology != D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP || CandidateBackgroundSlot() < 0) return;
+    // One sample every 120 ms is enough to see a pan/zoom curve without
+    // producing a per-frame dump from the engine's deferred contexts.
+    const ULONGLONG now = GetTickCount64();
+    ULONGLONG previous = g_backgroundMotionLastLogTick.load();
+    if (now - previous < 120 ||
+        !g_backgroundMotionLastLogTick.compare_exchange_strong(previous, now)) return;
+    const unsigned sample = g_backgroundMotionLogCount.fetch_add(1);
+    if (sample >= 180) return;
+
+    ID3D11InputLayout* layout = nullptr;
+    ID3D11Buffer* vertexBuffer = nullptr;
+    ID3D11VertexShader* vertexShader = nullptr;
+    ID3D11PixelShader* pixelShader = nullptr;
+    ID3D11GeometryShader* geometryShader = nullptr;
+    UINT stride = 0, offset = 0;
+    context->IAGetInputLayout(&layout);
+    context->IAGetVertexBuffers(0, 1, &vertexBuffer, &stride, &offset);
+    context->VSGetShader(&vertexShader, nullptr, nullptr);
+    context->PSGetShader(&pixelShader, nullptr, nullptr);
+    context->GSGetShader(&geometryShader, nullptr, nullptr);
+    D3D11_VIEWPORT viewport{};
+    UINT viewportCount = 1;
+    context->RSGetViewports(&viewportCount, &viewport);
+    Log("Background motion sample #%u tick=%llu mode=%ld texture=%ux%u vertex-start=%u "
+        "viewport=[%.2f,%.2f,%.2f,%.2f] input-layout=%p VS=%p GS=%p PS=%p",
+        sample + 1, static_cast<unsigned long long>(now), g_aspectMode.load(),
+        TextureWidth(0).load(), TextureHeight(0).load(), startVertex,
+        viewport.TopLeftX, viewport.TopLeftY, viewport.Width, viewport.Height,
+        layout, vertexShader, geometryShader, pixelShader);
+    if (stride && startVertex <= (UINT_MAX - offset) / stride) {
+        LogBufferFloats("VB0", vertexBuffer, stride, offset + startVertex * stride, "Background");
+    } else {
+        Log("Background geometry VB0: invalid stride or offset");
+    }
+    ID3D11Buffer* constantBuffers[2]{};
+    context->VSGetConstantBuffers(0, 2, constantBuffers);
+    LogBufferFloats("VS-CB0", constantBuffers[0], 0, 0, "Background");
+    LogBufferFloats("VS-CB1", constantBuffers[1], 0, 0, "Background");
+    SafeRelease(constantBuffers[0]);
+    SafeRelease(constantBuffers[1]);
+    SafeRelease(layout);
+    SafeRelease(vertexBuffer);
+    SafeRelease(vertexShader);
+    SafeRelease(pixelShader);
+    SafeRelease(geometryShader);
 }
 
 void LogUiGeometry(ID3D11DeviceContext* context) {
@@ -1108,6 +1173,9 @@ void STDMETHODCALLTYPE HookDraw(ID3D11DeviceContext* context, UINT vertexCount, 
     if (!g_internalDraw && CandidateBackgroundSlot() >= 0) {
         LogCandidateDraw(context, "Draw", vertexCount);
     }
+    D3D11_PRIMITIVE_TOPOLOGY topology{};
+    context->IAGetPrimitiveTopology(&topology);
+    if (!g_internalDraw) LogBackgroundMotionGeometry(context, vertexCount, startVertex, topology);
     D3D11_VIEWPORT viewport{};
     const bool backgroundCorrected = BeginBackgroundCorrection(context, viewport);
     const bool uiCorrected = !backgroundCorrected && BeginUiChromeCorrection(context, viewport);
@@ -1121,10 +1189,18 @@ void STDMETHODCALLTYPE HookDraw(ID3D11DeviceContext* context, UINT vertexCount, 
     ID3D11VertexShader* replacementVertexShader = nullptr;
     ID3D11GeometryShader* originalGeometryShader = nullptr;
     ID3D11GeometryShader* replacementGeometryShader = nullptr;
-    D3D11_PRIMITIVE_TOPOLOGY topology{};
-    context->IAGetPrimitiveTopology(&topology);
     if (backgroundCorrected && vertexCount == 4 && topology == D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP) {
-        replacementVertexShader = g_backgroundVertexShader.load(std::memory_order_acquire);
+        if (g_experimentalBackgroundMotion.load() && TextureHeight(0).load() == 1440) {
+            ID3D11GeometryShader* gameGeometryShader = nullptr;
+            context->GSGetShader(&gameGeometryShader, nullptr, nullptr);
+            if (!gameGeometryShader) {
+                replacementGeometryShader = g_backgroundMotionGeometryShader.load(std::memory_order_acquire);
+            }
+            SafeRelease(gameGeometryShader);
+        }
+        if (!replacementGeometryShader) {
+            replacementVertexShader = g_backgroundVertexShader.load(std::memory_order_acquire);
+        }
     } else if (!g_internalDraw && StoryPillarboxActive() && !g_systemUiSeen.load() && vertexCount == 4 &&
                topology == D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP &&
                TextureWidth(0).load() == 4096 && TextureHeight(0).load() == 7546) {
@@ -1317,6 +1393,7 @@ public:
         SafeRelease(textboxStyleBuffer_);
         SafeRelease(textboxPixelShader_);
         g_backgroundVertexShader.store(nullptr, std::memory_order_release);
+        g_backgroundMotionGeometryShader.store(nullptr, std::memory_order_release);
         g_nvlFontVertexShader.store(nullptr, std::memory_order_release);
         g_nvlFontInputLayout.store(nullptr, std::memory_order_release);
         g_nativeNvlGeometryShader.store(nullptr, std::memory_order_release);
@@ -1328,6 +1405,7 @@ public:
         SafeRelease(advNameGeometryShader_);
         SafeRelease(nvlFontVertexShader_);
         SafeRelease(backgroundVertexShader_);
+        SafeRelease(backgroundMotionGeometryShader_);
         SafeRelease(vertexShader_);
         SafeRelease(context_);
         SafeRelease(device_);
@@ -1479,6 +1557,30 @@ Output BackgroundVS(uint id : SV_VertexID) {
     o.uv = texcoords[corner];
     return o;
 }
+[maxvertexcount(3)]
+void BackgroundMotionGS(triangle Output input[3], inout TriangleStream<Output> stream) {
+    // The source is 1920x1440 while the game's viewport is 16:9. Depending
+    // on the scene, the engine can express that crop in UVs or by extending
+    // the quad beyond the viewport. Keep the engine's original vertex shader
+    // (and thus its camera animation), then undo only that aspect mismatch.
+    float2 uvMin = min(input[0].uv, min(input[1].uv, input[2].uv));
+    float2 uvMax = max(input[0].uv, max(input[1].uv, input[2].uv));
+    float2 pos0 = input[0].position.xy / input[0].position.w;
+    float2 pos1 = input[1].position.xy / input[1].position.w;
+    float2 pos2 = input[2].position.xy / input[2].position.w;
+    float2 posMin = min(pos0, min(pos1, pos2));
+    float2 posMax = max(pos0, max(pos1, pos2));
+    float uvRatio = (uvMax.y - uvMin.y) / max(uvMax.x - uvMin.x, 0.0001);
+    float posRatio = (posMax.y - posMin.y) / max(posMax.x - posMin.x, 0.0001);
+    bool uvCropped = uvRatio > 0.68 && uvRatio < 0.82;
+    bool geometryCropped = !uvCropped && posRatio > 1.20 && posRatio < 1.48;
+    [unroll] for (uint i = 0; i < 3; ++i) {
+        Output o = input[i];
+        if (uvCropped) o.uv.y = 0.5 + (o.uv.y - 0.5) * (4.0 / 3.0);
+        else if (geometryCropped) o.position.y *= 0.75;
+        stream.Append(o);
+    }
+}
 struct FontInput {
     float3 position : POSITION0;
     float4 color : COLOR0;
@@ -1563,6 +1665,7 @@ float4 TextboxPS(Output input) : SV_Target {
 )";
         ID3DBlob* vs = nullptr;
         ID3DBlob* backgroundVs = nullptr;
+        ID3DBlob* backgroundMotionGs = nullptr;
         ID3DBlob* nvlFontVs = nullptr;
         ID3DBlob* advNameGs = nullptr;
         ID3DBlob* maybeFontGs = nullptr;
@@ -1615,6 +1718,19 @@ float4 TextboxPS(Output input) : SV_Target {
             result = device_->CreateGeometryShader(maybeFontGs->GetBufferPointer(), maybeFontGs->GetBufferSize(),
                                                    nullptr, &maybeFontGeometryShader_);
         }
+        // Optional experiment: failure must never prevent the established
+        // fixed-quad correction or overlay from starting.
+        if (SUCCEEDED(result) && CompileShader(shaderSource, "BackgroundMotionGS", "gs_4_0",
+                                               &backgroundMotionGs)) {
+            const HRESULT motionResult = device_->CreateGeometryShader(
+                backgroundMotionGs->GetBufferPointer(), backgroundMotionGs->GetBufferSize(),
+                nullptr, &backgroundMotionGeometryShader_);
+            if (FAILED(motionResult)) {
+                Log("Background motion geometry shader unavailable: 0x%08lx",
+                    static_cast<unsigned long>(motionResult));
+            }
+        }
+        Log("Background motion geometry shader ready=%d", backgroundMotionGeometryShader_ != nullptr);
         if (SUCCEEDED(result) && g_nativeWindows) {
             if (!CompileShader(shaderSource, "NativeNvlGS", "gs_4_0", &nativeNvlGs)) result = E_FAIL;
             else result = device_->CreateGeometryShader(nativeNvlGs->GetBufferPointer(), nativeNvlGs->GetBufferSize(),
@@ -1626,6 +1742,7 @@ float4 TextboxPS(Output input) : SV_Target {
         if (SUCCEEDED(result)) result = device_->CreatePixelShader(textboxPs->GetBufferPointer(), textboxPs->GetBufferSize(), nullptr, &textboxPixelShader_);
         SafeRelease(vs);
         SafeRelease(backgroundVs);
+        SafeRelease(backgroundMotionGs);
         SafeRelease(nvlFontVs);
         SafeRelease(advNameGs);
         SafeRelease(maybeFontGs);
@@ -1634,6 +1751,7 @@ float4 TextboxPS(Output input) : SV_Target {
         SafeRelease(textboxPs);
         if (FAILED(result)) return false;
         g_backgroundVertexShader.store(backgroundVertexShader_, std::memory_order_release);
+        g_backgroundMotionGeometryShader.store(backgroundMotionGeometryShader_, std::memory_order_release);
         g_nvlFontVertexShader.store(nvlFontVertexShader_, std::memory_order_release);
         g_nvlFontInputLayout.store(nvlFontInputLayout_, std::memory_order_release);
         g_nativeNvlGeometryShader.store(nativeNvlGeometryShader_, std::memory_order_release);
@@ -1788,7 +1906,7 @@ float4 TextboxPS(Output input) : SV_Target {
                                     DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                     CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
         HGDIOBJ oldFont = SelectObject(panelDc_, titleFont);
-        TextOutW(panelDc_, 24, 18, L"My Merry May Fix 1.0.0", 22);
+        TextOutW(panelDc_, 24, 18, L"My Merry May Fix 1.0.1", 22);
         SelectObject(panelDc_, bodyFont);
 
         wchar_t line[256]{};
@@ -1890,6 +2008,7 @@ float4 TextboxPS(Output input) : SV_Target {
     ID3D11DeviceContext* context_ = nullptr;
     ID3D11VertexShader* vertexShader_ = nullptr;
     ID3D11VertexShader* backgroundVertexShader_ = nullptr;
+    ID3D11GeometryShader* backgroundMotionGeometryShader_ = nullptr;
     ID3D11VertexShader* nvlFontVertexShader_ = nullptr;
     ID3D11InputLayout* nvlFontInputLayout_ = nullptr;
     ID3D11GeometryShader* nativeNvlGeometryShader_ = nullptr;
@@ -1994,6 +2113,8 @@ LRESULT CALLBACK HookWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
             g_overlayVisible.store(visible);
             if (visible) {
                 g_candidateLogCount.store(0);
+                g_backgroundMotionLogCount.store(0);
+                g_backgroundMotionLastLogTick.store(0);
                 g_uiLogCount.store(0);
                 g_geometryLogMask.store(0);
             }
@@ -2531,7 +2652,7 @@ void PatchLoadedModules() {
 }
 
 DWORD WINAPI InitializationThread(void*) {
-    Log("MyMerryMayFix starting: version 1.0.0, build 47 (2026-10-11); native-Windows=%d", g_nativeWindows);
+    Log("MyMerryMayFix starting: version 1.0.1, build 48 (2026-10-12); native-Windows=%d", g_nativeWindows);
     // Keep polling because the launcher loads the selected Master DLL after this
     // proxy may already have been initialized.
     for (unsigned attempt = 0; attempt < 240 && g_running.load(); ++attempt) {
