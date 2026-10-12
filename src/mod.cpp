@@ -1928,7 +1928,7 @@ float4 TextboxPS(Output input) : SV_Target {
                                     DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                     CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
         HGDIOBJ oldFont = SelectObject(panelDc_, titleFont);
-        TextOutW(panelDc_, 24, 18, L"My Merry May Fix 1.0.1", 22);
+        TextOutW(panelDc_, 24, 18, L"My Merry May Fix 1.0.2", 22);
         SelectObject(panelDc_, bodyFont);
 
         wchar_t line[256]{};
@@ -2674,7 +2674,7 @@ void PatchLoadedModules() {
 }
 
 DWORD WINAPI InitializationThread(void*) {
-    Log("MyMerryMayFix starting: version 1.0.1, build 48 (2026-10-12); native-Windows=%d", g_nativeWindows);
+    Log("MyMerryMayFix starting: version 1.0.2, build 49 (2026-10-12); native-Windows=%d", g_nativeWindows);
     // Keep polling because the launcher loads the selected Master DLL after this
     // proxy may already have been initialized.
     for (unsigned attempt = 0; attempt < 240 && g_running.load(); ++attempt) {
