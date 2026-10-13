@@ -5,14 +5,17 @@
 #include <dxgi.h>
 #include <tlhelp32.h>
 #include <xaudio2.h>
+#include <xinput.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <climits>
 #include <cstdarg>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <mutex>
 #include <string>
 #ifdef _MSC_VER
 #include <intrin.h>
@@ -62,6 +65,11 @@ std::atomic<LONG> g_aspectMode{static_cast<LONG>(AspectMode::Off)};
 std::atomic<UINT> g_hotkey{VK_F12};
 std::atomic<bool> g_logging{true};
 std::atomic<bool> g_backgroundMotionDiagnostics{false};
+std::atomic<bool> g_controllerDiagnostics{false};
+std::atomic<bool> g_xinputEnabled{false};
+std::atomic<bool> g_xinputNativeActions{false};
+std::atomic<UINT> g_xinputBindingKeys[16]{};
+std::atomic<int> g_xinputBindingMouseButtons[16]{};
 std::atomic<bool> g_experimentalBackgroundMotion{false};
 std::atomic<bool> g_spritesOverPillarbox{true};
 std::atomic<LONG> g_overlaySelection{0};
@@ -113,6 +121,8 @@ SceneValue<bool> g_systemUiSeen{false, &SceneState::systemUiSeen};
 SceneValue<ID3D11VertexShader*> g_frameBackgroundVertexShader{nullptr, &SceneState::frameBackgroundVertexShader};
 
 WNDPROC g_originalWndProc = nullptr;
+using FindSteamInterfaceFn = void*(WINAPI*)(int, const char*);
+FindSteamInterfaceFn g_originalFindSteamInterface = nullptr;
 HWND g_window = nullptr;
 std::atomic<HCURSOR> g_gameCursor{nullptr};
 std::atomic<bool> g_cursorRestorePending{false};
@@ -290,6 +300,75 @@ std::wstring HotkeyName(UINT key) {
     return L"F12";
 }
 
+UINT ParseControllerKey(const wchar_t* text, int& mouseButton) {
+    mouseButton = 0;
+    if (!text || !*text || _wcsicmp(text, L"NONE") == 0) return 0;
+    if (_wcsicmp(text, L"LEFTMOUSE") == 0 || _wcsicmp(text, L"MOUSELEFT") == 0) {
+        mouseButton = 1;
+        return 0;
+    }
+    if (_wcsicmp(text, L"RIGHTMOUSE") == 0 || _wcsicmp(text, L"MOUSERIGHT") == 0) {
+        mouseButton = 2;
+        return 0;
+    }
+
+    UINT vk = 0;
+    if (text[0] >= L'A' && text[0] <= L'Z' && text[1] == L'\0') vk = text[0];
+    else if (text[0] >= L'0' && text[0] <= L'9' && text[1] == L'\0') vk = text[0];
+    else if (_wcsicmp(text, L"SPACE") == 0) vk = VK_SPACE;
+    else if (_wcsicmp(text, L"ENTER") == 0 || _wcsicmp(text, L"RETURN") == 0) vk = VK_RETURN;
+    else if (_wcsicmp(text, L"ESC") == 0 || _wcsicmp(text, L"ESCAPE") == 0) vk = VK_ESCAPE;
+    else if (_wcsicmp(text, L"TAB") == 0) vk = VK_TAB;
+    else if (_wcsicmp(text, L"SHIFT") == 0) vk = VK_SHIFT;
+    else if (_wcsicmp(text, L"CTRL") == 0 || _wcsicmp(text, L"CONTROL") == 0) vk = VK_CONTROL;
+    else if (_wcsicmp(text, L"ALT") == 0) vk = VK_MENU;
+    else if (_wcsicmp(text, L"UP") == 0 || _wcsicmp(text, L"ARROWUP") == 0) vk = VK_UP;
+    else if (_wcsicmp(text, L"DOWN") == 0 || _wcsicmp(text, L"ARROWDOWN") == 0) vk = VK_DOWN;
+    else if (_wcsicmp(text, L"LEFT") == 0 || _wcsicmp(text, L"ARROWLEFT") == 0) vk = VK_LEFT;
+    else if (_wcsicmp(text, L"RIGHT") == 0 || _wcsicmp(text, L"ARROWRIGHT") == 0) vk = VK_RIGHT;
+    else if (_wcsicmp(text, L"BACKSPACE") == 0) vk = VK_BACK;
+    else if (_wcsicmp(text, L"INSERT") == 0) vk = VK_INSERT;
+    else if (_wcsicmp(text, L"DELETE") == 0) vk = VK_DELETE;
+    else if (_wcsicmp(text, L"HOME") == 0) vk = VK_HOME;
+    else if (_wcsicmp(text, L"END") == 0) vk = VK_END;
+    else if (_wcsicmp(text, L"PAGEUP") == 0) vk = VK_PRIOR;
+    else if (_wcsicmp(text, L"PAGEDOWN") == 0) vk = VK_NEXT;
+    else if (text[0] == L'F' && text[1] >= L'1' && text[1] <= L'9' && text[2] == L'\0')
+        vk = VK_F1 + (text[1] - L'1');
+    else if (text[0] == L'F' && text[1] == L'1' && text[2] >= L'0' && text[2] <= L'2' && text[3] == L'\0')
+        vk = VK_F10 + (text[2] - L'0');
+    if (!vk) return 0;
+
+    const UINT scan = MapVirtualKeyW(vk, MAPVK_VK_TO_VSC_EX);
+    if (!scan) return 0;
+    const UINT low = scan & 0xff;
+    return (scan & 0xff00) == 0xe000 || (scan & 0xff00) == 0xe100
+        ? low | 0x80 : low;
+}
+
+void LoadControllerBindings() {
+    static constexpr const wchar_t* names[] = {
+        L"A", L"B", L"X", L"Y", L"Start", L"Back", L"LB", L"RB",
+        L"LT", L"RT", L"L3", L"R3", L"Up", L"Down", L"Right", L"Left"
+    };
+    static constexpr const wchar_t* defaults[] = {
+        L"SPACE", L"RIGHTMOUSE", L"G", L"2", L"1", L"X", L"Q", L"E",
+        L"R", L"F", L"NONE", L"NONE", L"UP", L"DOWN", L"RIGHT", L"LEFT"
+    };
+    for (unsigned index = 0; index < _countof(names); ++index) {
+        wchar_t value[32]{};
+        GetPrivateProfileStringW(L"Controller", names[index], defaults[index], value,
+                                 _countof(value), g_iniPath.c_str());
+        int mouseButton = 0;
+        const UINT key = ParseControllerKey(value, mouseButton);
+        g_xinputBindingKeys[index].store(key);
+        g_xinputBindingMouseButtons[index].store(mouseButton);
+        if (g_controllerDiagnostics.load())
+            Log("Controller binding %s=%ls (DIK=0x%02x mouse=%d)",
+                names[index], value, key, mouseButton);
+    }
+}
+
 void LoadConfiguration() {
     wchar_t hotkey[32]{};
     GetPrivateProfileStringW(L"Overlay", L"Hotkey", L"F12", hotkey, 32, g_iniPath.c_str());
@@ -338,6 +417,15 @@ void LoadConfiguration() {
     g_logging.store(GetPrivateProfileIntW(L"Debug", L"Logging", 1, g_iniPath.c_str()) != 0);
     g_backgroundMotionDiagnostics.store(GetPrivateProfileIntW(
         L"Debug", L"BackgroundMotionDiagnostics", 0, g_iniPath.c_str()) != 0);
+    g_controllerDiagnostics.store(GetPrivateProfileIntW(
+        L"Debug", L"ControllerDiagnostics", 0, g_iniPath.c_str()) != 0);
+    g_xinputEnabled.store(GetPrivateProfileIntW(
+        L"Input", L"XInputEnabled", 0, g_iniPath.c_str()) != 0);
+    g_xinputNativeActions.store(GetPrivateProfileIntW(
+        L"Input", L"XInputNativeActions", 0, g_iniPath.c_str()) != 0);
+    LoadControllerBindings();
+    Log("XInput bridge enabled=%d native-actions=%d",
+        g_xinputEnabled.load(), g_xinputNativeActions.load());
     g_wrapEnabled = GetPrivateProfileIntW(L"ExperimentalWrapping", L"Enabled", 0, g_iniPath.c_str()) != 0;
     const int width = GetPrivateProfileIntW(L"ExperimentalWrapping", L"Width", 1320, g_iniPath.c_str());
     const int caller = GetPrivateProfileIntW(L"ExperimentalWrapping", L"Caller", 0, g_iniPath.c_str());
@@ -1928,7 +2016,7 @@ float4 TextboxPS(Output input) : SV_Target {
                                     DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                     CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
         HGDIOBJ oldFont = SelectObject(panelDc_, titleFont);
-        TextOutW(panelDc_, 24, 18, L"My Merry May Fix 1.0.2", 22);
+        TextOutW(panelDc_, 24, 18, L"My Merry May Fix 1.0.3", 22);
         SelectObject(panelDc_, bodyFont);
 
         wchar_t line[256]{};
@@ -2112,6 +2200,18 @@ void RestoreGameCursorAfterMovement() {
     }
 }
 
+void ToggleOverlay() {
+    const bool visible = !g_overlayVisible.load();
+    g_overlayVisible.store(visible);
+    if (visible) {
+        g_candidateLogCount.store(0);
+        g_backgroundMotionLogCount.store(0);
+        g_backgroundMotionLastLogTick.store(0);
+        g_uiLogCount.store(0);
+        g_geometryLogMask.store(0);
+    }
+}
+
 LRESULT CALLBACK HookWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
     if (message == WM_KILLFOCUS ||
         (message == WM_ACTIVATE && LOWORD(wParam) == WA_INACTIVE) ||
@@ -2131,15 +2231,7 @@ LRESULT CALLBACK HookWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
         const bool repeated = (lParam & (1u << 30)) != 0;
         if (wParam == g_hotkey.load()) {
             if (repeated) return 0;
-            const bool visible = !g_overlayVisible.load();
-            g_overlayVisible.store(visible);
-            if (visible) {
-                g_candidateLogCount.store(0);
-                g_backgroundMotionLogCount.store(0);
-                g_backgroundMotionLastLogTick.store(0);
-                g_uiLogCount.store(0);
-                g_geometryLogMask.store(0);
-            }
+            ToggleOverlay();
             return 0;
         }
         if (g_overlayVisible.load()) {
@@ -2424,7 +2516,64 @@ HRESULT WINAPI HookD3D11CreateDevice(IDXGIAdapter* adapter, D3D_DRIVER_TYPE driv
     return result;
 }
 
+void PollControllerDiagnostics() {
+    if (!g_logging.load() || !g_controllerDiagnostics.load()) return;
+    static std::atomic<ULONGLONG> lastPoll{0};
+    const ULONGLONG now = GetTickCount64();
+    ULONGLONG previous = lastPoll.load();
+    if (now - previous < 100 || !lastPoll.compare_exchange_strong(previous, now)) return;
+
+    using GetStateFn = DWORD(WINAPI*)(DWORD, XINPUT_STATE*);
+    static std::once_flag resolveOnce;
+    static GetStateFn getState = nullptr;
+    std::call_once(resolveOnce, [] {
+        for (const wchar_t* dll : {L"xinput1_4.dll", L"xinput1_3.dll", L"xinput9_1_0.dll"}) {
+            HMODULE module = LoadLibraryW(dll);
+            if (!module) continue;
+            getState = reinterpret_cast<GetStateFn>(GetProcAddress(module, "XInputGetState"));
+            if (getState) {
+                Log("Controller diagnostics: XInputGetState available from %ls", dll);
+                break;
+            }
+            FreeLibrary(module);
+        }
+        if (!getState) Log("Controller diagnostics: no XInputGetState DLL available");
+    });
+    if (!getState) return;
+
+    static DWORD lastStatus[4]{~0u, ~0u, ~0u, ~0u};
+    static WORD lastButtons[4]{};
+    static DWORD lastPacket[4]{};
+    static ULONGLONG lastAnalogReport[4]{};
+    for (DWORD slot = 0; slot < 4; ++slot) {
+        XINPUT_STATE state{};
+        const DWORD status = getState(slot, &state);
+        if (status != lastStatus[slot]) {
+            Log("XInput slot=%lu status=%lu (%s)", static_cast<unsigned long>(slot),
+                static_cast<unsigned long>(status), status == ERROR_SUCCESS ? "connected" : "unavailable");
+            lastStatus[slot] = status;
+            lastButtons[slot] = 0;
+            lastPacket[slot] = 0;
+        }
+        if (status != ERROR_SUCCESS) continue;
+        const bool buttonsChanged = state.Gamepad.wButtons != lastButtons[slot];
+        const bool analogChanged = state.dwPacketNumber != lastPacket[slot] &&
+            now - lastAnalogReport[slot] >= 1000;
+        if (buttonsChanged || analogChanged) {
+            Log("XInput slot=%lu packet=%lu buttons=0x%04x LT=%u RT=%u LX=%d LY=%d RX=%d RY=%d",
+                static_cast<unsigned long>(slot), static_cast<unsigned long>(state.dwPacketNumber),
+                state.Gamepad.wButtons, state.Gamepad.bLeftTrigger, state.Gamepad.bRightTrigger,
+                state.Gamepad.sThumbLX, state.Gamepad.sThumbLY,
+                state.Gamepad.sThumbRX, state.Gamepad.sThumbRY);
+            if (analogChanged) lastAnalogReport[slot] = now;
+        }
+        lastButtons[slot] = state.Gamepad.wButtons;
+        lastPacket[slot] = state.dwPacketNumber;
+    }
+}
+
 HRESULT STDMETHODCALLTYPE HookPresent(IDXGISwapChain* swapChain, UINT interval, UINT flags) {
+    PollControllerDiagnostics();
     static ULONGLONG lastDiagnostic = 0;
     const ULONGLONG now = GetTickCount64();
     const bool diagnose = g_logging.load() && now - lastDiagnostic >= 5000;
@@ -2434,6 +2583,7 @@ HRESULT STDMETHODCALLTYPE HookPresent(IDXGISwapChain* swapChain, UINT interval, 
         // Some game modules replace GWLP_WNDPROC after creating the swap chain.
         // Revalidate at Present so the overlay hotkey survives that handoff.
         HookWindow(swapChainDescription.OutputWindow);
+        PollSelectorControllerPrompt(swapChainDescription.OutputWindow);
     }
     ID3D11Device* device = nullptr;
     if (SUCCEEDED(swapChain->GetDevice(__uuidof(ID3D11Device), reinterpret_cast<void**>(&device)))) {
@@ -2552,6 +2702,18 @@ HRESULT WINAPI HookCreateDXGIFactory1(REFIID interfaceId, void** factory) {
 
 void PatchModule(HMODULE module);
 
+void* WINAPI HookSteamFindInterface(int user, const char* version) {
+    if (!g_originalFindSteamInterface) return nullptr;
+    void* interfacePointer = g_originalFindSteamInterface(user, version);
+    if (g_xinputEnabled.load() && g_xinputNativeActions.load() && version &&
+        (strcmp(version, "SteamInput006") == 0 ||
+         strcmp(version, "SteamController008") == 0)) {
+        Log("Steam Input interface requested: %s object=%p", version, interfacePointer);
+        InstallSteamInputBridge(interfacePointer, version);
+    }
+    return interfacePointer;
+}
+
 void PatchLoadedGameModule(HMODULE module, DWORD flags = 0) {
     if (!module || module == g_self || (flags & (LOAD_LIBRARY_AS_DATAFILE |
         LOAD_LIBRARY_AS_DATAFILE_EXCLUSIVE | LOAD_LIBRARY_AS_IMAGE_RESOURCE |
@@ -2629,6 +2791,15 @@ void PatchWindowsLoaderImports(HMODULE module) {
 
 void PatchModule(HMODULE module) {
     if (module == g_self) return;
+    if (g_xinputEnabled.load() && g_xinputNativeActions.load()) {
+        const bool steamHooked = ReplaceImport(
+            module, "steam_api64.dll", "SteamInternal_FindOrCreateUserInterface",
+            reinterpret_cast<void*>(HookSteamFindInterface),
+            reinterpret_cast<void**>(&g_originalFindSteamInterface));
+        static std::atomic<unsigned> steamHookReports{0};
+        if (steamHooked && steamHookReports.fetch_add(1) < 4)
+            Log("Steam Input interface import hooked: module=%p", module);
+    }
     // Store forwarding targets before exposing either hook in an import slot.
     ReplaceImport(module, "dxgi.dll", "CreateDXGIFactory1",
                   reinterpret_cast<void*>(HookCreateDXGIFactory1),
@@ -2674,7 +2845,7 @@ void PatchLoadedModules() {
 }
 
 DWORD WINAPI InitializationThread(void*) {
-    Log("MyMerryMayFix starting: version 1.0.2, build 49 (2026-10-12); native-Windows=%d", g_nativeWindows);
+    Log("MyMerryMayFix starting: version 1.0.3, build 50 (2026-10-12); native-Windows=%d", g_nativeWindows);
     // Keep polling because the launcher loads the selected Master DLL after this
     // proxy may already have been initialized.
     for (unsigned attempt = 0; attempt < 240 && g_running.load(); ++attempt) {
@@ -2719,6 +2890,59 @@ bool IsOverlayVisible() {
     return g_overlayVisible.load();
 }
 
+void HandleControllerOverlayBinding(unsigned index, unsigned dik, bool pressed) {
+    static std::array<std::atomic<bool>, 16> wasPressed{};
+    if (index >= wasPressed.size()) return;
+    const bool risingEdge = pressed && !wasPressed[index].exchange(pressed);
+    if (!pressed) wasPressed[index].store(false);
+    if (!risingEdge) return;
+
+    const UINT hotkey = g_hotkey.load();
+    const UINT scan = MapVirtualKeyW(hotkey, MAPVK_VK_TO_VSC_EX);
+    if (!scan) return;
+    const unsigned hotkeyDik = (scan & 0xff00) == 0xe000 || (scan & 0xff00) == 0xe100
+        ? (scan & 0xff) | 0x80 : scan & 0xff;
+    if (dik == hotkeyDik) ToggleOverlay();
+}
+
+void HandleControllerOverlayNavigation(int horizontal, int vertical) {
+    struct RepeatState {
+        int direction = 0;
+        ULONGLONG nextRepeat = 0;
+        bool started = false;
+    };
+    static RepeatState horizontalState;
+    static RepeatState verticalState;
+    if (!g_overlayVisible.load() || !g_window) {
+        horizontalState = {};
+        verticalState = {};
+        return;
+    }
+    const ULONGLONG now = GetTickCount64();
+
+    auto pulse = [&](RepeatState& state, int direction, UINT key, bool isVertical) {
+        if (!direction) {
+            state = {};
+            return;
+        }
+        const bool initial = !state.started || state.direction != direction;
+        if (!initial && now < state.nextRepeat) return;
+        const bool repeated = !initial && !isVertical;
+        LPARAM flags = 1;
+        if (repeated) flags |= static_cast<LPARAM>(1u << 30);
+        SendMessageW(g_window, WM_KEYDOWN, key, flags);
+        state.started = true;
+        state.direction = direction;
+        // Vertical navigation repeats at a comfortable menu-scroll pace.
+        // Horizontal repeats are faster for numeric sliders; discrete rows
+        // already ignore repeated keydowns in the regular overlay handler.
+        state.nextRepeat = now + (isVertical ? 180 : 75);
+    };
+
+    pulse(verticalState, vertical, vertical > 0 ? VK_UP : VK_DOWN, true);
+    pulse(horizontalState, horizontal, horizontal < 0 ? VK_LEFT : VK_RIGHT, false);
+}
+
 bool IsCursorRestoreEnabled() {
     return g_restoreCursor.load();
 }
@@ -2740,6 +2964,37 @@ void ReportMouseReacquire(LONG lostResult, LONG acquireResult, LONG retryResult)
 
 void ReportMouseWake(const char* api, const char* edge) {
     Log("DirectInput mouse wake pulse: %s %s", api, edge);
+}
+
+bool IsControllerDiagnosticsEnabled() {
+    return g_logging.load() && g_controllerDiagnostics.load();
+}
+
+bool IsXInputEnabled() {
+    return g_xinputEnabled.load();
+}
+
+bool IsXInputNativeActionsEnabled() {
+    return g_xinputNativeActions.load();
+}
+
+unsigned GetXInputBindingKey(unsigned index) {
+    return index < _countof(g_xinputBindingKeys) ? g_xinputBindingKeys[index].load() : 0;
+}
+
+int GetXInputBindingMouseButton(unsigned index) {
+    return index < _countof(g_xinputBindingMouseButtons)
+        ? g_xinputBindingMouseButtons[index].load() : 0;
+}
+
+void ReportControllerDiagnostic(const char* format, ...) {
+    if (!IsControllerDiagnosticsEnabled()) return;
+    char message[512]{};
+    va_list args;
+    va_start(args, format);
+    vsnprintf(message, sizeof(message), format, args);
+    va_end(args);
+    Log("Controller diagnostics: %s", message);
 }
 
 } // namespace mmmfix

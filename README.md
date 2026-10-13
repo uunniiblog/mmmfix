@@ -15,6 +15,7 @@ Features:
 - Voice continuation: Keep voice playback to next line until the next voiced line.
 - High-resolution rendering: Renders the text and interface at main display resolutions instead of 1080p.
 - Mouse cursor restoration: Fixes weird mouse interaction of the game when focusing the game or pressing a keyboard input.
+- Optional XInput controller bridge: Maps basic controller buttons to the game's DirectInput keyboard controls.
 - ADV wrapping: Allows to change the length of ADV textbox lines. Needed for 4:3 where some long sentences go above the black pillarbox.
 
 Most story backgrounds and CGs are already stored as 4:3 assets, but the PC port crops them for a 16:9 presentation.
@@ -214,6 +215,59 @@ Disable this behavior and restore the original handling with:
 [Input]
 RestoreCursor=0
 ```
+
+## XInput controller bridge
+
+Without Steam Input, the game does not natively use the available XInput
+controller. To enable the optional bridge, restart after setting:
+
+```ini
+[Input]
+XInputEnabled=1
+XInputNativeActions=1
+```
+
+With `XInputNativeActions=1`, the first connected pad feeds the bundled Steam
+Input actions to the game. A/B/X/Y, Start, bumpers, and D-pad use the VDF's
+confirm/back/auto/backlog/menu/skip/navigation actions. The left stick provides
+arrow navigation. Set `XInputNativeActions=0` to use the configurable keyboard
+and mouse bindings below. The game’s keyboard guide lists Space=advance,
+X=cancel/textbox, G=auto, 2=backlog, 1=system menu, Q=force skip, E=skip mode,
+R=quick save, and F=quick load. The default LT/RT bindings provide quick
+save/load even while native actions are enabled; triggers activate past the
+XInput threshold. Set any binding to `NONE` to disable it, or use `RIGHTMOUSE`
+or `LEFTMOUSE` to send a mouse button. For example, change `B=RIGHTMOUSE` to
+`B=X` to use the X keyboard shortcut instead.
+
+```ini
+[Input]
+XInputEnabled=1
+XInputNativeActions=0
+
+[Controller]
+A=SPACE
+B=RIGHTMOUSE
+X=G
+Y=2
+Start=1
+Back=X
+LB=Q
+RB=E
+LT=R
+RT=F
+L3=NONE
+R3=NONE
+Up=UP
+Down=DOWN
+Right=RIGHT
+Left=LEFT
+```
+
+Bindings are read at startup. Physical keyboard input is preserved;
+controller input is ignored while the overlay is open or the game is
+unfocused. This works on Windows and Proton if XInput exposes the pad.
+`[Debug] ControllerDiagnostics=1` logs controller visibility and button activity
+when `Logging=1`.
 
 ## Experimental ADV wrapping
 

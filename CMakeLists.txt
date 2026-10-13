@@ -4,6 +4,7 @@ project(MyMerryMayFix LANGUAGES CXX)
 
 add_library(dinput8 SHARED
     src/dinput8_proxy.cpp
+    src/controller_bridge.cpp
     src/mod.cpp
     src/mod.h
     src/dinput8.def

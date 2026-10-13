@@ -4,9 +4,11 @@
 #include <windows.h>
 #include <unknwn.h>
 #include <dinput.h>
+#include <xinput.h>
 
 #include <cstring>
 #include <atomic>
+#include <mutex>
 
 namespace {
 
@@ -26,6 +28,9 @@ struct InputDeviceHooks {
     void* device = nullptr;
     void** vtable = nullptr;
     bool mouse = false;
+    bool keyboard = false;
+    std::atomic<unsigned> stateReports{0};
+    std::atomic<unsigned> dataReports{0};
     AcquireFn acquire = nullptr;
     GetDeviceStateFn getDeviceState = nullptr;
     GetDeviceDataFn getDeviceData = nullptr;
@@ -58,6 +63,125 @@ void ApplyMouseWakeToState(InputDeviceHooks* hooks, DWORD size, LPVOID data,
             state->rgbButtons[2] = 0;
             ReportMouseWake("state", "release");
         }
+    }
+}
+
+bool ReadXInputState(XINPUT_STATE& state, DWORD& slot) {
+    using GetStateFn = DWORD(WINAPI*)(DWORD, XINPUT_STATE*);
+    static std::once_flag resolveOnce;
+    static GetStateFn getState = nullptr;
+    std::call_once(resolveOnce, [] {
+        for (const wchar_t* dll : {L"xinput1_4.dll", L"xinput1_3.dll", L"xinput9_1_0.dll"}) {
+            HMODULE module = LoadLibraryW(dll);
+            if (!module) continue;
+            getState = reinterpret_cast<GetStateFn>(GetProcAddress(module, "XInputGetState"));
+            if (getState) {
+                mmmfix::ReportControllerDiagnostic("XInput keyboard bridge loaded %ls", dll);
+                break;
+            }
+            FreeLibrary(module);
+        }
+        if (!getState)
+            mmmfix::ReportControllerDiagnostic("XInput keyboard bridge unavailable: no XInput DLL");
+    });
+    if (!getState) return false;
+    for (slot = 0; slot < 4; ++slot)
+        if (getState(slot, &state) == ERROR_SUCCESS) return true;
+    return false;
+}
+
+bool ControllerButtonPressed(unsigned index, const XINPUT_STATE& state) {
+    static constexpr WORD masks[] = {
+        XINPUT_GAMEPAD_A, XINPUT_GAMEPAD_B, XINPUT_GAMEPAD_X, XINPUT_GAMEPAD_Y,
+        XINPUT_GAMEPAD_START, XINPUT_GAMEPAD_BACK,
+        XINPUT_GAMEPAD_LEFT_SHOULDER, XINPUT_GAMEPAD_RIGHT_SHOULDER,
+        0, 0, XINPUT_GAMEPAD_LEFT_THUMB, XINPUT_GAMEPAD_RIGHT_THUMB,
+        XINPUT_GAMEPAD_DPAD_UP, XINPUT_GAMEPAD_DPAD_DOWN,
+        XINPUT_GAMEPAD_DPAD_RIGHT, XINPUT_GAMEPAD_DPAD_LEFT
+    };
+    if (index == 8) return state.Gamepad.bLeftTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD;
+    if (index == 9) return state.Gamepad.bRightTrigger > XINPUT_GAMEPAD_TRIGGER_THRESHOLD;
+    return index < _countof(masks) && (state.Gamepad.wButtons & masks[index]) != 0;
+}
+
+void ApplyXInputToKeyboard(InputDeviceHooks* hooks, DWORD size, LPVOID data,
+                           HRESULT result) {
+    if (!hooks || !hooks->keyboard || FAILED(result) || !data || size < 256 ||
+        !mmmfix::IsXInputEnabled() || !mmmfix::IsGameWindowActive()) return;
+
+    XINPUT_STATE state{};
+    DWORD slot = 0;
+    if (!ReadXInputState(state, slot)) return;
+
+    auto* keys = static_cast<BYTE*>(data);
+    const SHORT leftX = state.Gamepad.sThumbLX;
+    const SHORT leftY = state.Gamepad.sThumbLY;
+    constexpr SHORT stickThreshold = 16000;
+    const bool nativeActions = mmmfix::IsSteamActionBridgeActive();
+
+    // Poll overlay bindings even while the overlay is visible, so the same
+    // controller button can both open and close it. In native-action mode,
+    // only the four extra bindings are active/configurable.
+    for (unsigned index = 0; index < 16; ++index) {
+        if (nativeActions && (index < 8 || index >= 12)) continue;
+        const unsigned dik = mmmfix::GetXInputBindingKey(index);
+        mmmfix::HandleControllerOverlayBinding(
+            index, dik, dik != 0 && ControllerButtonPressed(index, state));
+    }
+
+    if (mmmfix::IsOverlayVisible()) {
+        int horizontal = (state.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_RIGHT ? 1 : 0) -
+                         (state.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_LEFT ? 1 : 0);
+        int vertical = (state.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_UP ? 1 : 0) -
+                       (state.Gamepad.wButtons & XINPUT_GAMEPAD_DPAD_DOWN ? 1 : 0);
+        if (leftX > stickThreshold) horizontal = 1;
+        else if (leftX < -stickThreshold) horizontal = -1;
+        if (leftY > stickThreshold) vertical = 1;
+        else if (leftY < -stickThreshold) vertical = -1;
+        mmmfix::HandleControllerOverlayNavigation(horizontal, vertical);
+        return;
+    }
+
+    if (leftY > stickThreshold) keys[DIK_UP] |= 0x80;
+    if (leftY < -stickThreshold) keys[DIK_DOWN] |= 0x80;
+    if (leftX < -stickThreshold) keys[DIK_LEFT] |= 0x80;
+    if (leftX > stickThreshold) keys[DIK_RIGHT] |= 0x80;
+
+    // In native-action mode the game handles the VDF's standard buttons itself.
+    // Keep LT/RT/L3/R3 configurable for extra keyboard commands such as quick save/load.
+    for (unsigned index = 0; index < 16; ++index) {
+        if (nativeActions && (index < 8 || index >= 12)) continue;
+        const unsigned dik = mmmfix::GetXInputBindingKey(index);
+        if (dik && ControllerButtonPressed(index, state) && dik < size)
+            keys[dik] |= 0x80;
+    }
+    if (mmmfix::IsControllerDiagnosticsEnabled()) {
+        static WORD lastButtons = 0xffff;
+        const WORD currentButtons = state.Gamepad.wButtons;
+        if (lastButtons != currentButtons) {
+            lastButtons = currentButtons;
+            mmmfix::ReportControllerDiagnostic(
+                "XInput keyboard mapping slot=%lu buttons=0x%04x native-actions-active=%d",
+                static_cast<unsigned long>(slot), currentButtons, nativeActions);
+        }
+    }
+}
+
+void ApplyXInputToMouse(InputDeviceHooks* hooks, DWORD size, LPVOID data,
+                        HRESULT result) {
+    if (!hooks || !hooks->mouse || FAILED(result) || !data ||
+        size < sizeof(DIMOUSESTATE) || !mmmfix::IsXInputEnabled() ||
+        mmmfix::IsOverlayVisible() || !mmmfix::IsGameWindowActive()) return;
+    XINPUT_STATE state{};
+    DWORD slot = 0;
+    if (!ReadXInputState(state, slot)) return;
+    const bool nativeActions = mmmfix::IsSteamActionBridgeActive();
+    auto* mouse = static_cast<DIMOUSESTATE*>(data);
+    for (unsigned index = 0; index < 16; ++index) {
+        if (nativeActions && (index < 8 || index >= 12)) continue;
+        const int button = mmmfix::GetXInputBindingMouseButton(index);
+        if (button >= 1 && button <= 4 && ControllerButtonPressed(index, state))
+            mouse->rgbButtons[button - 1] |= 0x80;
     }
 }
 
@@ -111,6 +235,12 @@ HRESULT STDMETHODCALLTYPE HookGetDeviceState(void* device, DWORD size, LPVOID da
     HRESULT result = hooks->getDeviceState(device, size, data);
     result = ReacquireMouseAndRetryState(hooks, device, size, data, result);
     ApplyMouseWakeToState(hooks, size, data, result);
+    ApplyXInputToKeyboard(hooks, size, data, result);
+    ApplyXInputToMouse(hooks, size, data, result);
+    if (mmmfix::IsControllerDiagnosticsEnabled() && hooks->stateReports.fetch_add(1) < 3)
+        mmmfix::ReportControllerDiagnostic("DirectInput GetDeviceState kind=%s size=%lu result=0x%08lx",
+            hooks->mouse ? "mouse" : hooks->keyboard ? "keyboard" : "other",
+            static_cast<unsigned long>(size), static_cast<unsigned long>(result));
     if (mmmfix::IsOverlayVisible() && SUCCEEDED(result) && data) std::memset(data, 0, size);
     return result;
 }
@@ -122,6 +252,11 @@ HRESULT STDMETHODCALLTYPE HookGetDeviceData(void* device, DWORD objectSize,
     if (!hooks || !hooks->getDeviceData) return DIERR_GENERIC;
     const DWORD capacity = entries ? *entries : 0;
     HRESULT result = hooks->getDeviceData(device, objectSize, data, entries, flags);
+    if (mmmfix::IsControllerDiagnosticsEnabled() && hooks->dataReports.fetch_add(1) < 3)
+        mmmfix::ReportControllerDiagnostic("DirectInput GetDeviceData kind=%s size=%lu result=0x%08lx entries=%lu",
+            hooks->mouse ? "mouse" : hooks->keyboard ? "keyboard" : "other",
+            static_cast<unsigned long>(objectSize), static_cast<unsigned long>(result),
+            static_cast<unsigned long>(entries ? *entries : 0));
     if (hooks->mouse && hooks->acquire && mmmfix::IsCursorRestoreEnabled() && IsLostInput(result)) {
         g_mouseNeedsAcquire.store(true);
         if (!mmmfix::IsGameWindowActive()) {
@@ -162,7 +297,7 @@ HRESULT STDMETHODCALLTYPE HookGetDeviceData(void* device, DWORD objectSize,
     return result;
 }
 
-void HookInputDevice(void* device, bool mouse) {
+void HookInputDevice(void* device, bool mouse, bool keyboard) {
     if (!device) return;
     void** vtable = *reinterpret_cast<void***>(device);
     for (auto& hooks : g_inputDeviceHooks) if (hooks.device == device) return;
@@ -171,6 +306,7 @@ void HookInputDevice(void* device, bool mouse) {
         hooks.device = device;
         hooks.vtable = vtable;
         hooks.mouse = mouse;
+        hooks.keyboard = keyboard;
         // Keyboard and mouse objects can share a vtable. Reuse the forwarding
         // functions captured by the first object instead of attempting to hook
         // the same slots again and leaving this record without originals.
@@ -204,8 +340,17 @@ HRESULT STDMETHODCALLTYPE HookCreateDevice(void* input, REFGUID deviceGuid,
     // GUID_SysMouse = {6F1D2B60-D5A0-11CF-BFC7-444553540000}.
     static constexpr GUID systemMouse{0x6f1d2b60, 0xd5a0, 0x11cf,
                                       {0xbf, 0xc7, 0x44, 0x45, 0x53, 0x54, 0x00, 0x00}};
+    static constexpr GUID systemKeyboard{0x6f1d2b61, 0xd5a0, 0x11cf,
+                                         {0xbf, 0xc7, 0x44, 0x45, 0x53, 0x54, 0x00, 0x00}};
+    const bool mouse = IsEqualGUID(deviceGuid, systemMouse);
+    const bool keyboard = IsEqualGUID(deviceGuid, systemKeyboard);
+    if (mmmfix::IsControllerDiagnosticsEnabled())
+        mmmfix::ReportControllerDiagnostic("DirectInput CreateDevice kind=%s guid=%08lx-%04x-%04x result=0x%08lx object=%p",
+            mouse ? "mouse" : keyboard ? "keyboard" : "other",
+            static_cast<unsigned long>(deviceGuid.Data1), deviceGuid.Data2, deviceGuid.Data3,
+            static_cast<unsigned long>(result), output ? *output : nullptr);
     if (SUCCEEDED(result) && output && *output)
-        HookInputDevice(*output, IsEqualGUID(deviceGuid, systemMouse));
+        HookInputDevice(*output, mouse, keyboard);
     return result;
 }
 
@@ -268,6 +413,10 @@ extern "C" __declspec(dllexport) HRESULT WINAPI DirectInput8Create(
     const auto function = reinterpret_cast<Function>(ResolveReal("DirectInput8Create"));
     if (!function) return E_FAIL;
     const HRESULT result = function(instance, version, interfaceId, output, outer);
+    if (mmmfix::IsControllerDiagnosticsEnabled())
+        mmmfix::ReportControllerDiagnostic("DirectInput8Create version=0x%08lx result=0x%08lx object=%p",
+            static_cast<unsigned long>(version), static_cast<unsigned long>(result),
+            output ? *output : nullptr);
     if (SUCCEEDED(result) && output && *output) HookInput8(*output);
     return result;
 }
