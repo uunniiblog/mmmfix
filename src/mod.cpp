@@ -1317,7 +1317,8 @@ void STDMETHODCALLTYPE HookDraw(ID3D11DeviceContext* context, UINT vertexCount, 
             } else {
                 replacementVertexShader = g_nvlFontVertexShader.load(std::memory_order_acquire);
             }
-        } else if (g_messageUiSeen.load()) {
+        } else if (!g_nvlUiSeen.load() &&
+                   (g_messageUiSeen.load() || g_lastBackgroundAdjusted.load())) {
             replacementGeometryShader = g_advNameGeometryShader.load(std::memory_order_acquire);
         }
         if (replacementVertexShader || replacementGeometryShader) g_lastTextAdjusted.store(true);
@@ -1728,11 +1729,17 @@ void NativeNvlGS(triangle Output input[3], inout TriangleStream<Output> stream) 
 void AdvNameGS(triangle Output input[3], inout TriangleStream<Output> stream) {
     float centreY = (input[0].position.y + input[1].position.y + input[2].position.y) / 3.0;
     float shift = 0.0;
-    // Only touch the lower message area. This keeps chapter headings and other
-    // upper-screen text at the engine's native position.
-    if (centreY > -0.90 && centreY < -0.35) {
+    // A 4:3 viewport leaves a one-eighth-screen pillar on either side.
+    // Scene headings are still drawn in the original full-width viewport,
+    // so inset only the top title by that pillar width in clip coordinates.
+    if (centreY > 0.55) {
+        shift = 0.25;
+    } else if (centreY > -0.90 && centreY < -0.35) {
         shift = -0.016667;
-        if (centreY > -0.52) shift += 0.10;
+        // In 4:3 the nameplate's decorative slashes retain their inset, but
+        // the speaker name otherwise lands on top of them. Keep the dialogue
+        // offset above and move only the name into the solid part of the bar.
+        if (centreY > -0.52) shift += 0.23;
     }
     [unroll] for (uint i = 0; i < 3; ++i) {
         Output o = input[i];
@@ -1745,14 +1752,18 @@ void MaybeFontGS(triangle Output input[3], inout TriangleStream<Output> stream) 
     float centreY = (input[0].position.y + input[1].position.y + input[2].position.y) / 3.0;
     [unroll] for (uint i = 0; i < 3; ++i) {
         Output o = input[i];
-        if (centreY > -0.35) {
+        if (centreY > 0.80) {
+            // Scene titles sit above Maybe's NVL prose. Inset their glyphs
+            // by the left pillar without applying the NVL width scaling.
+            o.position.x += 0.25;
+        } else if (centreY > -0.35) {
             // Maybe's NVL mode has no data01 marker. Use the same proportional
             // inset as May for upper-screen prose.
             o.position.x = o.position.x * 0.85 - 0.016667;
         } else if (centreY > -0.90) {
             // Preserve the already-tested Maybe ADV dialogue/name placement.
             o.position.x += -0.016667;
-            if (centreY > -0.52) o.position.x += 0.10;
+            if (centreY > -0.52) o.position.x += 0.23;
         }
         stream.Append(o);
     }
@@ -2876,7 +2887,7 @@ void PatchLoadedModules() {
 }
 
 DWORD WINAPI InitializationThread(void*) {
-    Log("MyMerryMayFix starting: version 1.0.4, build 54 (2026-10-14); native-Windows=%d", g_nativeWindows);
+    Log("MyMerryMayFix starting: version 1.0.4, build 55 (2026-10-14); native-Windows=%d", g_nativeWindows);
     // Keep polling because the launcher loads the selected Master DLL after this
     // proxy may already have been initialized.
     for (unsigned attempt = 0; attempt < 240 && g_running.load(); ++attempt) {
