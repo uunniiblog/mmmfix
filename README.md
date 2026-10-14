@@ -271,21 +271,22 @@ when `Logging=1`.
 
 ## Experimental ADV wrapping
 
-The optional `[ExperimentalWrapping]` settings work on both native Windows and
-Proton. With `Enabled=1`, the fix reduces only the verified ADV dialogue-body
-layout to `Width=1320` engine units so long lines wrap before the right
-pillarbox. NVL, backlog, speaker names, menus, and other layouts retain their
-original widths. Restart the game after changing these values.
+The overlay can turn ADV wrapping on/off and adjust its line width while the
+game runs. Changes are saved to `[ExperimentalWrapping]` and apply to the next
+dialogue line; already displayed text is not reflowed. Hold Left/Right to
+adjust by 5 units, or Shift+Left/Right for single-unit steps. The overlay
+allows widths from 800 to 1420. NVL, backlog, speaker names, menus, and other
+layouts retain their original widths. Direct INI edits still require a restart.
 
 ```ini
 [ExperimentalWrapping]
 Enabled=1
 Width=1320
-Caller=0
 ```
 
-Modifying the width can break the textbox or make text disappear so while you can play
-with the value, I recommend leaving it around 1320.
+For a crash trace, set `[Debug] Logging=1` and `WrappingDiagnostics=1`, then
+restart and replay the line. The log records each ADV wrapping call and, on
+the known May crash path, the engine's glyph index and line-width state.
 
 ## Build on Linux
 

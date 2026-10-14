@@ -66,6 +66,7 @@ std::atomic<UINT> g_hotkey{VK_F12};
 std::atomic<bool> g_logging{true};
 std::atomic<bool> g_backgroundMotionDiagnostics{false};
 std::atomic<bool> g_controllerDiagnostics{false};
+std::atomic<bool> g_wrappingDiagnostics{false};
 std::atomic<bool> g_xinputEnabled{false};
 std::atomic<bool> g_xinputNativeActions{false};
 std::atomic<UINT> g_xinputBindingKeys[16]{};
@@ -97,9 +98,9 @@ std::atomic<bool> g_storyPillarboxActive{false};
 SceneValue<bool> g_backgroundCleared{false, &SceneState::backgroundCleared};
 thread_local bool g_internalDraw = false;
 bool g_nativeWindows = true;
-bool g_wrapEnabled = false;
-UINT g_wrapWidth = 1320;
-UINT g_wrapCaller = 0;
+std::atomic<bool> g_wrapEnabled{false};
+std::atomic<UINT> g_wrapWidth{1320};
+static_assert(sizeof(g_wrapEnabled) == 1 && sizeof(g_wrapWidth) == 4);
 // The engine's active body layout identifies panel-free NVL passages. Updated
 // before glyph layout, independent of the optional ADV width override.
 std::atomic<bool> g_engineNvlLayout{false};
@@ -419,6 +420,8 @@ void LoadConfiguration() {
         L"Debug", L"BackgroundMotionDiagnostics", 0, g_iniPath.c_str()) != 0);
     g_controllerDiagnostics.store(GetPrivateProfileIntW(
         L"Debug", L"ControllerDiagnostics", 0, g_iniPath.c_str()) != 0);
+    g_wrappingDiagnostics.store(GetPrivateProfileIntW(
+        L"Debug", L"WrappingDiagnostics", 0, g_iniPath.c_str()) != 0);
     g_xinputEnabled.store(GetPrivateProfileIntW(
         L"Input", L"XInputEnabled", 0, g_iniPath.c_str()) != 0);
     g_xinputNativeActions.store(GetPrivateProfileIntW(
@@ -426,12 +429,10 @@ void LoadConfiguration() {
     LoadControllerBindings();
     Log("XInput bridge enabled=%d native-actions=%d",
         g_xinputEnabled.load(), g_xinputNativeActions.load());
-    g_wrapEnabled = GetPrivateProfileIntW(L"ExperimentalWrapping", L"Enabled", 0, g_iniPath.c_str()) != 0;
+    g_wrapEnabled.store(GetPrivateProfileIntW(L"ExperimentalWrapping", L"Enabled", 0, g_iniPath.c_str()) != 0);
     const int width = GetPrivateProfileIntW(L"ExperimentalWrapping", L"Width", 1320, g_iniPath.c_str());
-    const int caller = GetPrivateProfileIntW(L"ExperimentalWrapping", L"Caller", 0, g_iniPath.c_str());
     // Zero width is an observation-only mode. Reject malformed values.
-    g_wrapWidth = width >= 0 && width <= 65535 ? static_cast<UINT>(width) : 0;
-    g_wrapCaller = caller >= 0 && caller <= 6 ? static_cast<UINT>(caller) : 7;
+    g_wrapWidth.store(width >= 0 && width <= 65535 ? static_cast<UINT>(width) : 0);
     Log("Background motion experiment=%d diagnostics=%d",
         g_experimentalBackgroundMotion.load(), g_backgroundMotionDiagnostics.load());
 }
@@ -459,6 +460,13 @@ void SaveTextboxStyle() {
     WritePrivateProfileStringW(L"Graphics", L"TextboxColorR", red.c_str(), g_iniPath.c_str());
     WritePrivateProfileStringW(L"Graphics", L"TextboxColorG", green.c_str(), g_iniPath.c_str());
     WritePrivateProfileStringW(L"Graphics", L"TextboxColorB", blue.c_str(), g_iniPath.c_str());
+}
+
+void SaveExperimentalWrapping() {
+    const std::wstring width = std::to_wstring(g_wrapWidth.load());
+    WritePrivateProfileStringW(L"ExperimentalWrapping", L"Enabled",
+                               g_wrapEnabled.load() ? L"1" : L"0", g_iniPath.c_str());
+    WritePrivateProfileStringW(L"ExperimentalWrapping", L"Width", width.c_str(), g_iniPath.c_str());
 }
 
 void SaveVoiceTextSpeed() {
@@ -2016,7 +2024,7 @@ float4 TextboxPS(Output input) : SV_Target {
                                     DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                     CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
         HGDIOBJ oldFont = SelectObject(panelDc_, titleFont);
-        TextOutW(panelDc_, 24, 18, L"My Merry May Fix 1.0.3", 22);
+        TextOutW(panelDc_, 24, 18, L"My Merry May Fix 1.0.4", 22);
         SelectObject(panelDc_, bodyFont);
 
         wchar_t line[256]{};
@@ -2075,11 +2083,23 @@ float4 TextboxPS(Output input) : SV_Target {
         SetTextColor(panelDc_, selected == 7 ? RGB(102, 224, 220) : RGB(235, 240, 247));
         TextOutW(panelDc_, 24, 280, line, static_cast<int>(wcslen(line)));
 
+        swprintf(line, 256, L"%lc ADV wrapping: %ls", selected == 8 ? L'>' : L' ',
+                 g_wrapEnabled.load() ? L"On" : L"Off");
+        SetTextColor(panelDc_, selected == 8 ? RGB(102, 224, 220) : RGB(235, 240, 247));
+        TextOutW(panelDc_, 24, 311, line, static_cast<int>(wcslen(line)));
+
+        swprintf(line, 256, L"%lc ADV line width: %u (next line)", selected == 9 ? L'>' : L' ',
+                 g_wrapWidth.load());
+        SetTextColor(panelDc_, selected == 9 ? RGB(102, 224, 220) : RGB(235, 240, 247));
+        TextOutW(panelDc_, 24, 342, line, static_cast<int>(wcslen(line)));
+        const LONG displayWidth = std::clamp(static_cast<LONG>(g_wrapWidth.load()), 800L, 1420L);
+        drawSlider(342, (displayWidth - 800) * 100 / 620, 100, RGB(58, 201, 196));
+
         SetTextColor(panelDc_, RGB(235, 240, 247));
-        TextOutW(panelDc_, 24, 311, L"  Pillarbox color:   Black", 26);
+        TextOutW(panelDc_, 24, 373, L"  Pillarbox color:   Black", 26);
         const std::wstring hotkey = HotkeyName(g_hotkey.load());
         swprintf(line, 256, L"  Overlay hotkey:    %ls", hotkey.c_str());
-        TextOutW(panelDc_, 24, 342, line, static_cast<int>(wcslen(line)));
+        TextOutW(panelDc_, 24, 404, line, static_cast<int>(wcslen(line)));
 
         SetTextColor(panelDc_, RGB(170, 181, 194));
         if (!g_highResolution.load()) {
@@ -2090,11 +2110,11 @@ float4 TextboxPS(Output input) : SV_Target {
         } else {
             swprintf(line, 256, L"  High-resolution rendering: On (inactive at this resolution)");
         }
-        TextOutW(panelDc_, 24, 384, line, static_cast<int>(wcslen(line)));
+        TextOutW(panelDc_, 24, 446, line, static_cast<int>(wcslen(line)));
 
         SetTextColor(panelDc_, RGB(130, 142, 157));
         constexpr wchar_t controls[] = L"Up/Down: select  Left/Right: change  Esc: close";
-        TextOutW(panelDc_, 24, 428, controls, static_cast<int>(wcslen(controls)));
+        TextOutW(panelDc_, 24, 490, controls, static_cast<int>(wcslen(controls)));
         SelectObject(panelDc_, oldFont);
         DeleteObject(titleFont);
         DeleteObject(bodyFont);
@@ -2113,7 +2133,7 @@ float4 TextboxPS(Output input) : SV_Target {
     }
 
     static constexpr int panelWidth_ = 660;
-    static constexpr int panelHeight_ = 469;
+    static constexpr int panelHeight_ = 531;
     ID3D11Device* device_ = nullptr;
     ID3D11DeviceContext* context_ = nullptr;
     ID3D11VertexShader* vertexShader_ = nullptr;
@@ -2242,16 +2262,15 @@ LRESULT CALLBACK HookWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
             if (!repeated && (wParam == VK_UP || wParam == VK_DOWN)) {
                 LONG selection = g_overlaySelection.load();
                 selection += (wParam == VK_DOWN) ? 1 : -1;
-                if (selection < 0) selection = 7;
-                if (selection > 7) selection = 0;
+                if (selection < 0) selection = 9;
+                if (selection > 9) selection = 0;
                 g_overlaySelection.store(selection);
                 return 0;
             }
             if (wParam == VK_LEFT || wParam == VK_RIGHT) {
                 const LONG selection = g_overlaySelection.load();
-                // Aspect mode and sprite priority are discrete toggles. Key
-                // repeat is useful only for the four numeric sliders.
-                if (repeated && (selection < 2 || selection >= 6)) return 0;
+                // Repeat only numeric sliders, including the ADV width.
+                if (repeated && !((selection >= 2 && selection <= 5) || selection == 9)) return 0;
                 const LONG direction = wParam == VK_RIGHT ? 1 : -1;
                 if (selection == 0) {
                     LONG mode = g_aspectMode.load();
@@ -2278,6 +2297,18 @@ LRESULT CALLBACK HookWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
                     g_continueVoiceUntilNext.store(enabled);
                     SaveVoiceContinuation();
                     Log("Voice continuation until next voiced line changed to %d", enabled);
+                } else if (selection == 8) {
+                    const bool enabled = !g_wrapEnabled.load();
+                    g_wrapEnabled.store(enabled);
+                    SaveExperimentalWrapping();
+                    Log("ADV wrapping changed to %d", enabled);
+                } else if (selection == 9) {
+                    const LONG oldWidth = std::clamp(static_cast<LONG>(g_wrapWidth.load()), 800L, 1420L);
+                    const LONG step = GetKeyState(VK_SHIFT) < 0 ? 1 : 5;
+                    const LONG width = std::clamp(oldWidth + direction * step, 800L, 1420L);
+                    g_wrapWidth.store(static_cast<UINT>(width));
+                    SaveExperimentalWrapping();
+                    Log("ADV wrapping width changed to %ld", width);
                 } else {
                     std::atomic<LONG>* value = nullptr;
                     LONG maximum = 255;
@@ -2845,7 +2876,7 @@ void PatchLoadedModules() {
 }
 
 DWORD WINAPI InitializationThread(void*) {
-    Log("MyMerryMayFix starting: version 1.0.3, build 50 (2026-10-12); native-Windows=%d", g_nativeWindows);
+    Log("MyMerryMayFix starting: version 1.0.4, build 54 (2026-10-14); native-Windows=%d", g_nativeWindows);
     // Keep polling because the launcher loads the selected Master DLL after this
     // proxy may already have been initialized.
     for (unsigned attempt = 0; attempt < 240 && g_running.load(); ++attempt) {
@@ -2864,6 +2895,7 @@ void Initialize(HMODULE selfModule) {
     g_iniPath = ModuleSiblingPath(L"MyMerryMayFix.ini");
     g_logPath = ModuleSiblingPath(L"MyMerryMayFix.log");
     LoadConfiguration();
+    InstallWrapExceptionDiagnostic();
     g_running.store(true);
     // Install the loader interception before the launcher loads its selector.
     // XAudio2 is created by that selector and shared with the chosen game, so
@@ -2881,6 +2913,10 @@ void Initialize(HMODULE selfModule) {
 
 void Shutdown() {
     g_running.store(false);
+    if (g_wrapDiagnosticHandler) {
+        RemoveVectoredExceptionHandler(g_wrapDiagnosticHandler);
+        g_wrapDiagnosticHandler = nullptr;
+    }
     if (g_window && g_originalWndProc) {
         SetWindowLongPtrW(g_window, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(g_originalWndProc));
     }
