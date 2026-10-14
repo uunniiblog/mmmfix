@@ -96,12 +96,15 @@ TextboxOpacity=100
 TextboxColorR=255
 TextboxColorG=255
 TextboxColorB=255
+HideAutoSkipButtons=0
 ```
 
-The replacement shader is disabled at those defaults. At other values it is
-restricted by source texture coordinates to the full-width ADV textbox region,
-including its message-transition copies; AUTO/SKIP, speaker chrome, ADV glyphs,
-NVL, backlog, and system menus retain their original style.
+`HideAutoSkipButtons=1` hides the ADV AUTO/SKIP graphics in both games, including
+their highlighted states. The switch is available live in the overlay and is saved
+to the INI. The replacement shader is disabled at the defaults above. Opacity
+and colour affect only the ADV textbox region, including its message-transition
+copies; the hide switch affects only the button images. Speaker chrome, ADV
+glyphs, NVL, backlog, and system menus retain their original style.
 
 ## Sprites over bars
 `SpritesOverPillarbox=1` (the default) preserves the PC port's extra widescreen

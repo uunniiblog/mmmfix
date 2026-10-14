@@ -79,6 +79,7 @@ std::atomic<LONG> g_textboxOpacity{100};
 std::atomic<LONG> g_textboxColorR{255};
 std::atomic<LONG> g_textboxColorG{255};
 std::atomic<LONG> g_textboxColorB{255};
+std::atomic<bool> g_hideAutoSkipButtons{false};
 std::atomic<bool> g_matchVoicedTextSpeed{false};
 std::atomic<bool> g_continueVoiceUntilNext{false};
 // The engine fades dialogue channel 3 to zero before it reaches the channel
@@ -391,6 +392,8 @@ void LoadConfiguration() {
         GetPrivateProfileIntW(L"Graphics", L"TextboxColorG", 255, g_iniPath.c_str())), 0L, 255L));
     g_textboxColorB.store(std::clamp(static_cast<LONG>(
         GetPrivateProfileIntW(L"Graphics", L"TextboxColorB", 255, g_iniPath.c_str())), 0L, 255L));
+    g_hideAutoSkipButtons.store(GetPrivateProfileIntW(
+        L"Graphics", L"HideAutoSkipButtons", 0, g_iniPath.c_str()) != 0);
     g_restoreCursor.store(GetPrivateProfileIntW(L"Input", L"RestoreCursor", 1,
                                                  g_iniPath.c_str()) != 0);
     g_matchVoicedTextSpeed.store(GetPrivateProfileIntW(
@@ -460,6 +463,11 @@ void SaveTextboxStyle() {
     WritePrivateProfileStringW(L"Graphics", L"TextboxColorR", red.c_str(), g_iniPath.c_str());
     WritePrivateProfileStringW(L"Graphics", L"TextboxColorG", green.c_str(), g_iniPath.c_str());
     WritePrivateProfileStringW(L"Graphics", L"TextboxColorB", blue.c_str(), g_iniPath.c_str());
+}
+
+void SaveAutoSkipButtons() {
+    WritePrivateProfileStringW(L"Graphics", L"HideAutoSkipButtons",
+                               g_hideAutoSkipButtons.load() ? L"1" : L"0", g_iniPath.c_str());
 }
 
 void SaveExperimentalWrapping() {
@@ -1173,7 +1181,8 @@ bool IsAdvTextboxAtlasDraw(ID3D11DeviceContext* context, UINT vertexCount) {
 
 bool TextboxStyleIsOriginal() {
     return g_textboxOpacity.load() == 100 && g_textboxColorR.load() == 255 &&
-           g_textboxColorG.load() == 255 && g_textboxColorB.load() == 255;
+           g_textboxColorG.load() == 255 && g_textboxColorB.load() == 255 &&
+           !g_hideAutoSkipButtons.load();
 }
 
 struct TextboxStyleScope {
@@ -1188,11 +1197,21 @@ struct TextboxStyleScope {
         ID3D11Buffer* buffer = g_textboxStyleBuffer.load(std::memory_order_acquire);
         if (!shader || !buffer) return;
 
-        struct StyleConstants { float tint[3]; float opacity; } constants{
+        struct StyleConstants {
+            float tint[3];
+            float opacity;
+            float hideAutoSkip;
+            float atlasHeight;
+            float padding[2];
+        } constants{
             {g_textboxColorR.load() / 255.0f, g_textboxColorG.load() / 255.0f,
              g_textboxColorB.load() / 255.0f},
-            g_textboxOpacity.load() / 100.0f
+            g_textboxOpacity.load() / 100.0f,
+            g_hideAutoSkipButtons.load() ? 1.0f : 0.0f,
+            static_cast<float>(TextureHeight(0).load()),
+            {0.0f, 0.0f}
         };
+        static_assert(sizeof(StyleConstants) == 32);
         context->PSGetShader(&originalShader, nullptr, nullptr);
         context->PSGetConstantBuffers(7, 1, &originalBuffer);
         context->UpdateSubresource(buffer, 0, nullptr, &constants, 0, 0);
@@ -1630,7 +1649,13 @@ private:
     bool CreatePermanentResources() {
         static constexpr char shaderSource[] = R"(
 cbuffer TransformBuffer : register(b0) { float2 scale; float2 offset; };
-cbuffer TextboxStyleBuffer : register(b7) { float3 textboxTint; float textboxOpacity; };
+cbuffer TextboxStyleBuffer : register(b7) {
+    float3 textboxTint;
+    float textboxOpacity;
+    float hideAutoSkip;
+    float atlasHeight;
+    float2 stylePadding;
+};
 struct Output { float4 position : SV_Position; float4 color : COLOR0; float2 uv : TEXCOORD0; };
 Output VSMain(uint id : SV_VertexID) {
     float2 positions[6] = {
@@ -1773,6 +1798,17 @@ SamplerState imageSampler : register(s0);
 float4 PSMain(Output input) : SV_Target { return image.Sample(imageSampler, input.uv); }
 float4 SolidPS(Output input) : SV_Target { return float4(0, 0, 0, 1); }
 float4 TextboxPS(Output input) : SV_Target {
+    // Both games keep all four active/inactive AUTO and SKIP button images
+    // together in meschip.png. Mask atlas pixels, not screen coordinates, so
+    // hover states and resolution changes use the same visual-only switch.
+    float2 atlasPixel = input.uv * float2(4096.0, atlasHeight);
+    bool maybeAtlas = atlasHeight > 462.0;
+    bool buttonPixel = maybeAtlas
+        ? atlasPixel.x >= 1384.0 && atlasPixel.x < 1885.0 &&
+          atlasPixel.y >= 384.0 && atlasPixel.y < 431.0
+        : atlasPixel.x >= 315.0 && atlasPixel.x < 815.0 &&
+          atlasPixel.y >= 410.0 && atlasPixel.y < 460.0;
+    if (hideAutoSkip > 0.5 && buttonPixel) discard;
     float4 pixel = image.Sample(imageSampler, input.uv) * input.color;
     // The 1920-wide ADV panel occupies the upper-left part of the shared
     // 4096x460/464 atlas. Limit styling by source UV instead of screen-space
@@ -1896,7 +1932,7 @@ float4 TextboxPS(Output input) : SV_Target {
         if (FAILED(device_->CreateBuffer(&bufferDesc, nullptr, &constantBuffer_))) return false;
 
         D3D11_BUFFER_DESC textboxBufferDesc{};
-        textboxBufferDesc.ByteWidth = 16;
+        textboxBufferDesc.ByteWidth = 32;
         textboxBufferDesc.Usage = D3D11_USAGE_DEFAULT;
         textboxBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
         if (FAILED(device_->CreateBuffer(&textboxBufferDesc, nullptr, &textboxStyleBuffer_))) return false;
@@ -2035,7 +2071,7 @@ float4 TextboxPS(Output input) : SV_Target {
                                     DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                     CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
         HGDIOBJ oldFont = SelectObject(panelDc_, titleFont);
-        TextOutW(panelDc_, 24, 18, L"My Merry May Fix 1.0.4", 22);
+        TextOutW(panelDc_, 24, 18, L"My Merry May Fix 1.0.5", 22);
         SelectObject(panelDc_, bodyFont);
 
         wchar_t line[256]{};
@@ -2106,8 +2142,11 @@ float4 TextboxPS(Output input) : SV_Target {
         const LONG displayWidth = std::clamp(static_cast<LONG>(g_wrapWidth.load()), 800L, 1420L);
         drawSlider(342, (displayWidth - 800) * 100 / 620, 100, RGB(58, 201, 196));
 
+        swprintf(line, 256, L"%lc Hide AUTO/SKIP buttons: %ls", selected == 10 ? L'>' : L' ',
+                 g_hideAutoSkipButtons.load() ? L"On" : L"Off");
+        SetTextColor(panelDc_, selected == 10 ? RGB(102, 224, 220) : RGB(235, 240, 247));
+        TextOutW(panelDc_, 24, 373, line, static_cast<int>(wcslen(line)));
         SetTextColor(panelDc_, RGB(235, 240, 247));
-        TextOutW(panelDc_, 24, 373, L"  Pillarbox color:   Black", 26);
         const std::wstring hotkey = HotkeyName(g_hotkey.load());
         swprintf(line, 256, L"  Overlay hotkey:    %ls", hotkey.c_str());
         TextOutW(panelDc_, 24, 404, line, static_cast<int>(wcslen(line)));
@@ -2273,8 +2312,8 @@ LRESULT CALLBACK HookWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
             if (!repeated && (wParam == VK_UP || wParam == VK_DOWN)) {
                 LONG selection = g_overlaySelection.load();
                 selection += (wParam == VK_DOWN) ? 1 : -1;
-                if (selection < 0) selection = 9;
-                if (selection > 9) selection = 0;
+                if (selection < 0) selection = 10;
+                if (selection > 10) selection = 0;
                 g_overlaySelection.store(selection);
                 return 0;
             }
@@ -2320,6 +2359,11 @@ LRESULT CALLBACK HookWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
                     g_wrapWidth.store(static_cast<UINT>(width));
                     SaveExperimentalWrapping();
                     Log("ADV wrapping width changed to %ld", width);
+                } else if (selection == 10) {
+                    const bool hide = !g_hideAutoSkipButtons.load();
+                    g_hideAutoSkipButtons.store(hide);
+                    SaveAutoSkipButtons();
+                    Log("AUTO/SKIP button visuals hidden=%d", hide);
                 } else {
                     std::atomic<LONG>* value = nullptr;
                     LONG maximum = 255;
@@ -2887,7 +2931,7 @@ void PatchLoadedModules() {
 }
 
 DWORD WINAPI InitializationThread(void*) {
-    Log("MyMerryMayFix starting: version 1.0.4, build 55 (2026-10-14); native-Windows=%d", g_nativeWindows);
+    Log("MyMerryMayFix starting: version 1.0.5, build 56 (2026-10-14); native-Windows=%d", g_nativeWindows);
     // Keep polling because the launcher loads the selected Master DLL after this
     // proxy may already have been initialized.
     for (unsigned attempt = 0; attempt < 240 && g_running.load(); ++attempt) {

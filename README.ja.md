@@ -63,9 +63,12 @@ TextboxOpacity=100
 TextboxColorR=255
 TextboxColorG=255
 TextboxColorB=255
+HideAutoSkipButtons=0
 ```
 
-初期値では置き換えシェーダーは無効です。変更時もADVテキストボックスの領域だけに適用されます。AUTO／SKIPボタン、話者名表示、ADV本文、NVL、バックログ、システムメニューの見た目は変わりません。
+`HideAutoSkipButtons=1` で、両作品のADV画面にあるAUTO／SKIPボタンの画像を非表示にできます。オーバーレイで実行中に切り替えられ、設定はINIに保存されます。
+
+初期値では置き換えシェーダーは無効です。変更時もADVテキストボックスとAUTO／SKIPボタンの画像領域だけに適用されます。話者名表示、ADV本文、NVL、バックログ、システムメニューの見た目は変わりません。
 
 ## 立ち絵と黒帯
 
