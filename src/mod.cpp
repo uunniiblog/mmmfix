@@ -1160,7 +1160,9 @@ bool IsUiChromeTexture() {
     const UINT width = TextureWidth(0).load();
     const UINT height = TextureHeight(0).load();
     return (width == 4096 && (height == 460 || height == 464)) || // MMM / MMMB ADV
-           (width == 512 && height == 923);                       // shared NVL panel
+           // Rain/effect quads can use the same dimensions as May's NVL panel.
+           // The body-layout hook identifies NVL before its UI and glyph draws.
+           (width == 512 && height == 923 && g_engineNvlLayout.load());
 }
 
 bool IsAdvTextboxTexture() {
@@ -1265,11 +1267,9 @@ bool BeginUiChromeCorrection(ID3D11DeviceContext* context, D3D11_VIEWPORT& origi
 }
 
 bool UseMayNvlCorrection() {
-    // Reveal glyphs can be recorded on a different deferred context, without
-    // any message-panel draw. The engine body layout is available before the
-    // first glyph; only the older panel-based path needs both UI markers.
-    return g_engineNvlLayout.load() ||
-           (g_messageUiSeen.load() && g_nvlUiSeen.load());
+    // The engine layout is authoritative. A 512x923 effect in an ADV scene
+    // must not turn its dialogue glyphs into NVL glyphs via the UI markers.
+    return g_engineNvlLayout.load();
 }
 
 void STDMETHODCALLTYPE HookDraw(ID3D11DeviceContext* context, UINT vertexCount, UINT startVertex) {
@@ -1336,8 +1336,7 @@ void STDMETHODCALLTYPE HookDraw(ID3D11DeviceContext* context, UINT vertexCount, 
             } else {
                 replacementVertexShader = g_nvlFontVertexShader.load(std::memory_order_acquire);
             }
-        } else if (!g_nvlUiSeen.load() &&
-                   (g_messageUiSeen.load() || g_lastBackgroundAdjusted.load())) {
+        } else if (g_messageUiSeen.load() || g_lastBackgroundAdjusted.load()) {
             replacementGeometryShader = g_advNameGeometryShader.load(std::memory_order_acquire);
         }
         if (replacementVertexShader || replacementGeometryShader) g_lastTextAdjusted.store(true);
