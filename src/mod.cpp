@@ -17,6 +17,8 @@
 #include <cstring>
 #include <mutex>
 #include <string>
+#include <utility>
+#include <vector>
 #ifdef _MSC_VER
 #include <intrin.h>
 #endif
@@ -65,6 +67,7 @@ std::atomic<LONG> g_aspectMode{static_cast<LONG>(AspectMode::Off)};
 std::atomic<UINT> g_hotkey{VK_F12};
 std::atomic<bool> g_logging{true};
 std::atomic<bool> g_backgroundMotionDiagnostics{false};
+std::atomic<bool> g_displayDiagnostics{false};
 std::atomic<bool> g_controllerDiagnostics{false};
 std::atomic<bool> g_wrappingDiagnostics{false};
 std::atomic<bool> g_xinputEnabled{false};
@@ -421,6 +424,8 @@ void LoadConfiguration() {
     g_logging.store(GetPrivateProfileIntW(L"Debug", L"Logging", 1, g_iniPath.c_str()) != 0);
     g_backgroundMotionDiagnostics.store(GetPrivateProfileIntW(
         L"Debug", L"BackgroundMotionDiagnostics", 0, g_iniPath.c_str()) != 0);
+    g_displayDiagnostics.store(GetPrivateProfileIntW(
+        L"Debug", L"DisplayDiagnostics", 0, g_iniPath.c_str()) != 0);
     g_controllerDiagnostics.store(GetPrivateProfileIntW(
         L"Debug", L"ControllerDiagnostics", 0, g_iniPath.c_str()) != 0);
     g_wrappingDiagnostics.store(GetPrivateProfileIntW(
@@ -779,6 +784,141 @@ void UpdateRenderTargetDimensions(ID3D11RenderTargetView* view) {
 bool StoryGameModuleLoaded() {
     return GetModuleHandleW(L"MyMerryMay_WIN_Master.dll") != nullptr ||
            GetModuleHandleW(L"MyMerryMaybe_WIN_Master.dll") != nullptr;
+}
+
+struct DisplayMonitorLogState {
+    unsigned count = 0;
+};
+
+BOOL CALLBACK LogDisplayMonitor(HMONITOR monitor, HDC, LPRECT, LPARAM value) {
+    auto& state = *reinterpret_cast<DisplayMonitorLogState*>(value);
+    if (state.count >= 8) return FALSE;
+    MONITORINFOEXW info{};
+    info.cbSize = sizeof(info);
+    if (!GetMonitorInfoW(monitor, &info)) return TRUE;
+    Log("Display diagnostic monitor[%u]: handle=%p device=%ls rect=%ld,%ld-%ld,%ld work=%ld,%ld-%ld,%ld primary=%d",
+        state.count++, monitor, info.szDevice,
+        info.rcMonitor.left, info.rcMonitor.top, info.rcMonitor.right, info.rcMonitor.bottom,
+        info.rcWork.left, info.rcWork.top, info.rcWork.right, info.rcWork.bottom,
+        (info.dwFlags & MONITORINFOF_PRIMARY) != 0);
+    for (const auto& query : {std::pair<DWORD, DWORD>{ENUM_CURRENT_SETTINGS, 0},
+                              {ENUM_CURRENT_SETTINGS, EDS_RAWMODE},
+                              {ENUM_REGISTRY_SETTINGS, 0}}) {
+        DEVMODEW mode{};
+        mode.dmSize = sizeof(mode);
+        const BOOL available = EnumDisplaySettingsExW(info.szDevice, query.first, &mode, query.second);
+        Log("Display diagnostic mode: device=%ls kind=%s result=%d size=%lux%lu frequency=%lu fields=0x%08lx",
+            info.szDevice, query.first == ENUM_REGISTRY_SETTINGS ? "registry" :
+            query.second == EDS_RAWMODE ? "current-raw" : "current",
+            available, static_cast<unsigned long>(mode.dmPelsWidth),
+            static_cast<unsigned long>(mode.dmPelsHeight),
+            static_cast<unsigned long>(mode.dmDisplayFrequency),
+            static_cast<unsigned long>(mode.dmFields));
+    }
+    return TRUE;
+}
+
+void LogDisplaySnapshot(const char* stage, HWND window, IDXGISwapChain* swapChain = nullptr) {
+    if (!g_logging.load() || !g_displayDiagnostics.load()) return;
+    static std::atomic<unsigned> snapshots{0};
+    if (snapshots.fetch_add(1) >= 16) return;
+    char session[32]{};
+    GetEnvironmentVariableA("XDG_SESSION_TYPE", session, sizeof(session));
+    Log("Display diagnostic %s: session=%s wayland-env=%d x11-env=%d system=%dx%d virtual=%d,%d %dx%d process-dpi-aware=%d",
+        stage, session[0] ? session : "unset",
+        GetEnvironmentVariableA("WAYLAND_DISPLAY", nullptr, 0) > 0,
+        GetEnvironmentVariableA("DISPLAY", nullptr, 0) > 0,
+        GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN),
+        GetSystemMetrics(SM_XVIRTUALSCREEN), GetSystemMetrics(SM_YVIRTUALSCREEN),
+        GetSystemMetrics(SM_CXVIRTUALSCREEN), GetSystemMetrics(SM_CYVIRTUALSCREEN),
+        IsProcessDPIAware());
+
+    HMODULE user32 = GetModuleHandleW(L"user32.dll");
+    using GetDpiForWindowFn = UINT(WINAPI*)(HWND);
+    using GetDpiForSystemFn = UINT(WINAPI*)();
+    const auto windowDpi = user32 ? reinterpret_cast<GetDpiForWindowFn>(GetProcAddress(user32, "GetDpiForWindow")) : nullptr;
+    const auto systemDpi = user32 ? reinterpret_cast<GetDpiForSystemFn>(GetProcAddress(user32, "GetDpiForSystem")) : nullptr;
+    HMODULE shcore = LoadLibraryW(L"shcore.dll");
+    using GetProcessDpiAwarenessFn = HRESULT(WINAPI*)(HANDLE, int*);
+    const auto processAwareness = shcore ? reinterpret_cast<GetProcessDpiAwarenessFn>(
+        GetProcAddress(shcore, "GetProcessDpiAwareness")) : nullptr;
+    int awareness = -1;
+    const HRESULT awarenessResult = processAwareness
+        ? processAwareness(nullptr, &awareness) : E_NOTIMPL;
+    HDC dc = GetDC(window);
+    const int deviceDpi = dc ? GetDeviceCaps(dc, LOGPIXELSX) : 0;
+    if (dc) ReleaseDC(window, dc);
+    Log("Display diagnostic DPI: process-result=0x%08lx awareness=%d system=%u window=%u device-caps=%d",
+        static_cast<unsigned long>(awarenessResult), awareness,
+        systemDpi ? systemDpi() : 0, window && windowDpi ? windowDpi(window) : 0, deviceDpi);
+    if (shcore) FreeLibrary(shcore);
+
+    DisplayMonitorLogState monitors{};
+    EnumDisplayMonitors(nullptr, nullptr, LogDisplayMonitor, reinterpret_cast<LPARAM>(&monitors));
+    if (window) {
+        RECT frame{}, client{};
+        GetWindowRect(window, &frame);
+        GetClientRect(window, &client);
+        POINT clientOrigin{};
+        ClientToScreen(window, &clientOrigin);
+        const HMONITOR monitor = MonitorFromWindow(window, MONITOR_DEFAULTTONEAREST);
+        Log("Display diagnostic window: hwnd=%p monitor=%p frame=%ld,%ld-%ld,%ld client=%ldx%ld client-origin=%ld,%ld style=0x%08lx ex-style=0x%08lx visible=%d maximized=%d",
+            window, monitor, frame.left, frame.top, frame.right, frame.bottom,
+            client.right - client.left, client.bottom - client.top,
+            clientOrigin.x, clientOrigin.y,
+            static_cast<unsigned long>(GetWindowLongW(window, GWL_STYLE)),
+            static_cast<unsigned long>(GetWindowLongW(window, GWL_EXSTYLE)),
+            IsWindowVisible(window), IsZoomed(window));
+    }
+
+    using GetDisplayConfigBufferSizesFn = LONG(WINAPI*)(UINT32, UINT32*, UINT32*);
+    using QueryDisplayConfigFn = LONG(WINAPI*)(UINT32, UINT32*, DISPLAYCONFIG_PATH_INFO*,
+                                               UINT32*, DISPLAYCONFIG_MODE_INFO*, DISPLAYCONFIG_TOPOLOGY_ID*);
+    const auto bufferSizes = user32 ? reinterpret_cast<GetDisplayConfigBufferSizesFn>(
+        GetProcAddress(user32, "GetDisplayConfigBufferSizes")) : nullptr;
+    const auto queryConfig = user32 ? reinterpret_cast<QueryDisplayConfigFn>(
+        GetProcAddress(user32, "QueryDisplayConfig")) : nullptr;
+    UINT32 pathCount = 0, modeCount = 0;
+    const LONG sizeResult = bufferSizes
+        ? bufferSizes(QDC_ONLY_ACTIVE_PATHS, &pathCount, &modeCount) : ERROR_CALL_NOT_IMPLEMENTED;
+    Log("Display diagnostic config: size-result=%ld paths=%u modes=%u",
+        sizeResult, pathCount, modeCount);
+    if (sizeResult == ERROR_SUCCESS && queryConfig && pathCount <= 16 && modeCount <= 64) {
+        std::vector<DISPLAYCONFIG_PATH_INFO> paths(pathCount);
+        std::vector<DISPLAYCONFIG_MODE_INFO> modes(modeCount);
+        const LONG queryResult = queryConfig(QDC_ONLY_ACTIVE_PATHS, &pathCount, paths.data(),
+                                             &modeCount, modes.data(), nullptr);
+        Log("Display diagnostic config: query-result=%ld paths=%u modes=%u",
+            queryResult, pathCount, modeCount);
+        if (queryResult == ERROR_SUCCESS) {
+            for (UINT32 i = 0; i < std::min<UINT32>(modeCount, 16); ++i) {
+                const auto& mode = modes[i];
+                if (mode.infoType == DISPLAYCONFIG_MODE_INFO_TYPE_SOURCE) {
+                    Log("Display diagnostic config-mode[%u]: source=%ux%u position=%ld,%ld",
+                        i, mode.sourceMode.width, mode.sourceMode.height,
+                        mode.sourceMode.position.x, mode.sourceMode.position.y);
+                } else if (mode.infoType == DISPLAYCONFIG_MODE_INFO_TYPE_TARGET) {
+                    const auto& signal = mode.targetMode.targetVideoSignalInfo;
+                    Log("Display diagnostic config-mode[%u]: target active=%ux%u total=%ux%u",
+                        i, signal.activeSize.cx, signal.activeSize.cy,
+                        signal.totalSize.cx, signal.totalSize.cy);
+                }
+            }
+        }
+    }
+
+    if (swapChain) {
+        IDXGIOutput* output = nullptr;
+        const HRESULT result = swapChain->GetContainingOutput(&output);
+        DXGI_OUTPUT_DESC desc{};
+        const HRESULT descResult = output ? output->GetDesc(&desc) : E_FAIL;
+        Log("Display diagnostic DXGI output: result=0x%08lx desc-result=0x%08lx name=%ls desktop=%ld,%ld-%ld,%ld attached=%d monitor=%p",
+            static_cast<unsigned long>(result), static_cast<unsigned long>(descResult),
+            output ? desc.DeviceName : L"", desc.DesktopCoordinates.left,
+            desc.DesktopCoordinates.top, desc.DesktopCoordinates.right,
+            desc.DesktopCoordinates.bottom, desc.AttachedToDesktop, desc.Monitor);
+        SafeRelease(output);
+    }
 }
 
 void UpdateNativeRenderResolution(HWND window) {
@@ -1754,9 +1894,10 @@ void AdvNameGS(triangle Output input[3], inout TriangleStream<Output> stream) {
     float centreY = (input[0].position.y + input[1].position.y + input[2].position.y) / 3.0;
     float shift = 0.0;
     // A 4:3 viewport leaves a one-eighth-screen pillar on either side.
-    // Scene headings are still drawn in the original full-width viewport,
-    // so inset only the top title by that pillar width in clip coordinates.
-    if (centreY > 0.55) {
+    // Scene headings are still drawn in the original full-width viewport.
+    // Their observed glyphs sit above 0.83, whereas the highest choice text
+    // sits around 0.6; keep the choice rows out of the title inset.
+    if (centreY > 0.80) {
         shift = 0.25;
     } else if (centreY > -0.90 && centreY < -0.35) {
         shift = -0.016667;
@@ -2727,6 +2868,7 @@ HRESULT STDMETHODCALLTYPE HookResizeBuffers(IDXGISwapChain* swapChain, UINT coun
                 monitor.rcMonitor.bottom - monitor.rcMonitor.top, desc.Windowed);
         }
         SafeRelease(backBuffer);
+        if (desc.OutputWindow) LogDisplaySnapshot("swapchain-resized", desc.OutputWindow, swapChain);
     }
     return result;
 }
@@ -2767,9 +2909,15 @@ void HookSwapChain(IDXGISwapChain* swapChain) {
 
 HRESULT STDMETHODCALLTYPE HookCreateSwapChain(IDXGIFactory* factory, IUnknown* device,
                                               DXGI_SWAP_CHAIN_DESC* desc, IDXGISwapChain** swapChain) {
-    if (desc) UpdateNativeRenderResolution(desc->OutputWindow);
+    if (desc) {
+        LogDisplaySnapshot("pre-swapchain", desc->OutputWindow);
+        UpdateNativeRenderResolution(desc->OutputWindow);
+    }
     const HRESULT result = g_originalCreateSwapChain(factory, device, desc, swapChain);
-    if (SUCCEEDED(result) && swapChain && *swapChain) HookSwapChain(*swapChain);
+    if (SUCCEEDED(result) && swapChain && *swapChain) {
+        HookSwapChain(*swapChain);
+        LogDisplaySnapshot("swapchain-created", desc ? desc->OutputWindow : nullptr, *swapChain);
+    }
     return result;
 }
 
@@ -2931,6 +3079,7 @@ void PatchLoadedModules() {
 
 DWORD WINAPI InitializationThread(void*) {
     Log("MyMerryMayFix starting: version 1.0.5, build 56 (2026-10-14); native-Windows=%d", g_nativeWindows);
+    LogDisplaySnapshot("startup", nullptr);
     // Keep polling because the launcher loads the selected Master DLL after this
     // proxy may already have been initialized.
     for (unsigned attempt = 0; attempt < 240 && g_running.load(); ++attempt) {

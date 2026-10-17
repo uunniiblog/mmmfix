@@ -178,6 +178,11 @@ The panel shows whether experimental high-resolution rendering is enabled and,
 when active, its effective internal resolution. Detailed D3D11 diagnostics are
 kept in the log instead of occupying space in the overlay.
 
+If Wine reports an unexpected monitor size, enable `Logging=1` and
+`DisplayDiagnostics=1` in `[Debug]`, then restart. The log compares Win32
+monitor modes, active display configuration, DPI, window size, and DXGI output
+at startup and swapchain creation. These checks are read-only.
+
 `MyMerryMayFix.log` is created beside the DLL. When reporting a problem, include
 that log and screenshots with the overlay open in both story mode and gallery
 mode. For background classification, a screenshot taken while the relevant CG
