@@ -68,6 +68,7 @@ std::atomic<UINT> g_hotkey{VK_F12};
 std::atomic<bool> g_logging{true};
 std::atomic<bool> g_backgroundMotionDiagnostics{false};
 std::atomic<bool> g_displayDiagnostics{false};
+std::atomic<bool> g_systemDialogDiagnostics{false};
 std::atomic<bool> g_controllerDiagnostics{false};
 std::atomic<bool> g_wrappingDiagnostics{false};
 std::atomic<bool> g_xinputEnabled{false};
@@ -79,6 +80,7 @@ std::atomic<bool> g_spritesOverPillarbox{true};
 std::atomic<LONG> g_overlaySelection{0};
 std::atomic<bool> g_restoreCursor{true};
 std::atomic<LONG> g_textboxOpacity{100};
+std::atomic<bool> g_uniformTextboxOpacity{false};
 std::atomic<LONG> g_textboxColorR{255};
 std::atomic<LONG> g_textboxColorG{255};
 std::atomic<LONG> g_textboxColorB{255};
@@ -96,8 +98,8 @@ UINT g_configuredRenderWidth = 0;
 UINT g_configuredRenderHeight = 0;
 std::atomic<UINT> g_nativeRenderWidth{0};
 std::atomic<UINT> g_nativeRenderHeight{0};
-// Persists the story's 4:3 presentation across backgroundless and native
-// 16:9 black frames. Known system UI and swap-chain changes clear it.
+// Persists the story's 4:3 presentation across backgroundless and flat
+// 16:9 frames. Known system UI and swap-chain changes clear it.
 std::atomic<bool> g_storyPillarboxActive{false};
 SceneValue<bool> g_backgroundCleared{false, &SceneState::backgroundCleared};
 thread_local bool g_internalDraw = false;
@@ -154,6 +156,12 @@ using DrawIndexedFn = void(STDMETHODCALLTYPE*)(ID3D11DeviceContext*, UINT, UINT,
 using MapFn = HRESULT(STDMETHODCALLTYPE*)(ID3D11DeviceContext*, ID3D11Resource*, UINT,
                                           D3D11_MAP, UINT, D3D11_MAPPED_SUBRESOURCE*);
 using UnmapFn = void(STDMETHODCALLTYPE*)(ID3D11DeviceContext*, ID3D11Resource*, UINT);
+using UpdateSubresourceFn = void(STDMETHODCALLTYPE*)(ID3D11DeviceContext*, ID3D11Resource*, UINT,
+                                                     const D3D11_BOX*, const void*, UINT, UINT);
+using CopySubresourceRegionFn = void(STDMETHODCALLTYPE*)(ID3D11DeviceContext*, ID3D11Resource*, UINT,
+                                                        UINT, UINT, UINT, ID3D11Resource*, UINT,
+                                                        const D3D11_BOX*);
+using CopyResourceFn = void(STDMETHODCALLTYPE*)(ID3D11DeviceContext*, ID3D11Resource*, ID3D11Resource*);
 using CreateDeferredContextFn = HRESULT(STDMETHODCALLTYPE*)(ID3D11Device*, UINT, ID3D11DeviceContext**);
 using CreateTexture2DFn = HRESULT(STDMETHODCALLTYPE*)(ID3D11Device*, const D3D11_TEXTURE2D_DESC*,
                                                        const D3D11_SUBRESOURCE_DATA*, ID3D11Texture2D**);
@@ -170,6 +178,7 @@ std::atomic<unsigned> g_candidateLogCount{0};
 std::atomic<unsigned> g_backgroundMotionLogCount{0};
 std::atomic<ULONGLONG> g_backgroundMotionLastLogTick{0};
 std::atomic<unsigned> g_uiLogCount{0};
+std::atomic<unsigned> g_systemDialogLogCount{0};
 std::atomic<unsigned> g_geometryLogMask{0};
 std::atomic<ID3D11VertexShader*> g_backgroundVertexShader{nullptr};
 std::atomic<ID3D11GeometryShader*> g_backgroundMotionGeometryShader{nullptr};
@@ -180,6 +189,11 @@ std::atomic<ID3D11GeometryShader*> g_advNameGeometryShader{nullptr};
 std::atomic<ID3D11GeometryShader*> g_maybeFontGeometryShader{nullptr};
 std::atomic<ID3D11PixelShader*> g_textboxPixelShader{nullptr};
 std::atomic<ID3D11Buffer*> g_textboxStyleBuffer{nullptr};
+std::atomic<ID3D11PixelShader*> g_flatStoryPixelShader{nullptr};
+std::atomic<ID3D11Buffer*> g_flatStoryViewportBuffer{nullptr};
+const GUID kStoryTextureKindGuid = {0xf5292b6e, 0x620e, 0x4f92,
+                                    {0xa1, 0x2b, 0xf2, 0xd3, 0xd7, 0x5e, 0x40, 0x16}};
+enum : UINT { kStoryTextureOther = 0, kStoryTextureWhite = 1, kStoryTexturePreframed = 2 };
 
 struct ContextHooks {
     std::atomic<void**> vtable{nullptr};
@@ -195,6 +209,9 @@ struct ContextHooks {
     DrawIndexedFn drawIndexed = nullptr;
     MapFn map = nullptr;
     UnmapFn unmap = nullptr;
+    UpdateSubresourceFn updateSubresource = nullptr;
+    CopySubresourceRegionFn copySubresourceRegion = nullptr;
+    CopyResourceFn copyResource = nullptr;
     HRESULT (STDMETHODCALLTYPE* finishCommandList)(ID3D11DeviceContext*, BOOL, ID3D11CommandList**) = nullptr;
     SceneState scene;
     void (STDMETHODCALLTYPE* iaSetVertexBuffers)(ID3D11DeviceContext*, UINT, UINT, ID3D11Buffer* const*, const UINT*, const UINT*) = nullptr;
@@ -232,6 +249,8 @@ struct ActiveMap {
     ID3D11Resource* resource = nullptr;
     void* data = nullptr;
     UINT byteWidth = 0;
+    UINT rowPitch = 0;
+    D3D11_TEXTURE2D_DESC textureDesc{};
 };
 thread_local ActiveMap g_activeMap;
 
@@ -389,6 +408,8 @@ void LoadConfiguration() {
         L"Graphics", L"ExperimentalBackgroundMotion", 0, g_iniPath.c_str()) != 0);
     g_textboxOpacity.store(std::clamp(static_cast<LONG>(
         GetPrivateProfileIntW(L"Graphics", L"TextboxOpacity", 100, g_iniPath.c_str())), 0L, 200L));
+    g_uniformTextboxOpacity.store(GetPrivateProfileIntW(
+        L"Graphics", L"UniformTextboxOpacity", 0, g_iniPath.c_str()) != 0);
     g_textboxColorR.store(std::clamp(static_cast<LONG>(
         GetPrivateProfileIntW(L"Graphics", L"TextboxColorR", 255, g_iniPath.c_str())), 0L, 255L));
     g_textboxColorG.store(std::clamp(static_cast<LONG>(
@@ -426,6 +447,8 @@ void LoadConfiguration() {
         L"Debug", L"BackgroundMotionDiagnostics", 0, g_iniPath.c_str()) != 0);
     g_displayDiagnostics.store(GetPrivateProfileIntW(
         L"Debug", L"DisplayDiagnostics", 0, g_iniPath.c_str()) != 0);
+    g_systemDialogDiagnostics.store(GetPrivateProfileIntW(
+        L"Debug", L"SystemDialogDiagnostics", 0, g_iniPath.c_str()) != 0);
     g_controllerDiagnostics.store(GetPrivateProfileIntW(
         L"Debug", L"ControllerDiagnostics", 0, g_iniPath.c_str()) != 0);
     g_wrappingDiagnostics.store(GetPrivateProfileIntW(
@@ -468,6 +491,11 @@ void SaveTextboxStyle() {
     WritePrivateProfileStringW(L"Graphics", L"TextboxColorR", red.c_str(), g_iniPath.c_str());
     WritePrivateProfileStringW(L"Graphics", L"TextboxColorG", green.c_str(), g_iniPath.c_str());
     WritePrivateProfileStringW(L"Graphics", L"TextboxColorB", blue.c_str(), g_iniPath.c_str());
+}
+
+void SaveUniformTextboxOpacity() {
+    WritePrivateProfileStringW(L"Graphics", L"UniformTextboxOpacity",
+                               g_uniformTextboxOpacity.load() ? L"1" : L"0", g_iniPath.c_str());
 }
 
 void SaveAutoSkipButtons() {
@@ -576,6 +604,87 @@ void GetTextureDimensions(ID3D11ShaderResourceView* view, UINT& width, UINT& hei
         SafeRelease(texture);
         SafeRelease(resource);
     }
+}
+
+UINT StoryTextureKind(ID3D11Resource* resource) {
+    if (!resource) return kStoryTextureOther;
+    UINT kind = kStoryTextureOther;
+    UINT size = sizeof(kind);
+    if (FAILED(resource->GetPrivateData(kStoryTextureKindGuid, &size, &kind)) || size != sizeof(kind))
+        return kStoryTextureOther;
+    return kind;
+}
+
+UINT StoryTextureKindBound(ID3D11DeviceContext* context) {
+    ID3D11ShaderResourceView* view = nullptr;
+    context->PSGetShaderResources(0, 1, &view);
+    ID3D11Resource* resource = nullptr;
+    if (view) view->GetResource(&resource);
+    const UINT kind = StoryTextureKind(resource);
+    SafeRelease(resource);
+    SafeRelease(view);
+    return kind;
+}
+
+bool WhiteStoryTextureBound(ID3D11DeviceContext* context) {
+    return StoryTextureKindBound(context) == kStoryTextureWhite;
+}
+
+UINT ClassifyStoryTexture(const D3D11_TEXTURE2D_DESC& desc, const void* source, UINT rowPitch) {
+    if (!source || desc.Width != 1920 || (desc.Height != 1080 && desc.Height != 1440) ||
+        desc.SampleDesc.Count != 1 || desc.ArraySize != 1 || rowPitch < desc.Width * 4)
+        return kStoryTextureOther;
+    switch (desc.Format) {
+        case DXGI_FORMAT_R8G8B8A8_UNORM:
+        case DXGI_FORMAT_R8G8B8A8_UNORM_SRGB:
+        case DXGI_FORMAT_B8G8R8A8_UNORM:
+        case DXGI_FORMAT_B8G8R8A8_UNORM_SRGB:
+            break;
+        default:
+            return kStoryTextureOther;
+    }
+    const auto* pixels = static_cast<const unsigned char*>(source);
+    auto pixel = [&](UINT x, UINT y) {
+        return pixels + static_cast<size_t>(y) * rowPitch + static_cast<size_t>(x) * 4;
+    };
+    if (desc.Height == 1080) {
+        // Reject illustrated frames immediately; only a truly white source
+        // gets side bars. This is intentionally stricter than a white border.
+        const auto* middle = pixel(desc.Width / 2, desc.Height / 2);
+        if (middle[0] < 250 || middle[1] < 250 || middle[2] < 250)
+            return kStoryTextureOther;
+        for (UINT y = 0; y < desc.Height; ++y) {
+            const auto* row = pixels + static_cast<size_t>(y) * rowPitch;
+            for (UINT x = 0; x < desc.Width; ++x) {
+                const auto* p = row + static_cast<size_t>(x) * 4;
+                if (p[0] < 250 || p[1] < 250 || p[2] < 250)
+                    return kStoryTextureOther;
+            }
+        }
+        return kStoryTextureWhite;
+    }
+    const UINT xs[] = {desc.Width / 32, desc.Width / 16,
+                       desc.Width - desc.Width / 16, desc.Width - desc.Width / 32};
+    const UINT ys[] = {desc.Height / 4, desc.Height / 2, desc.Height * 3 / 4};
+    for (UINT y : ys) for (UINT x : xs) {
+        const auto* p = pixel(x, y);
+        if (p[0] > 8 || p[1] > 8 || p[2] > 8) return kStoryTextureOther;
+    }
+    const auto* middle = pixel(desc.Width / 2, desc.Height / 2);
+    if (middle[0] < 32 && middle[1] < 32 && middle[2] < 32)
+        return kStoryTextureOther;
+    return kStoryTexturePreframed;
+}
+
+void TagStoryTexture(ID3D11Resource* resource, const D3D11_TEXTURE2D_DESC& desc,
+                     const void* source, UINT rowPitch, const char* upload) {
+    if (!resource || desc.Width != 1920 || (desc.Height != 1080 && desc.Height != 1440)) return;
+    const UINT kind = ClassifyStoryTexture(desc, source, rowPitch);
+    resource->SetPrivateData(kStoryTextureKindGuid, sizeof(kind), &kind);
+    static std::atomic<unsigned> logs{0};
+    if (logs.fetch_add(1) < 32)
+        Log("Story texture upload: via=%s size=%ux%u format=%u pitch=%u kind=%u",
+            upload, desc.Width, desc.Height, static_cast<unsigned>(desc.Format), rowPitch, kind);
 }
 
 void UpdateTextureDimensions(ID3D11ShaderResourceView* view) {
@@ -742,6 +851,20 @@ HRESULT STDMETHODCALLTYPE HookMap(ID3D11DeviceContext* context, ID3D11Resource* 
             buffer->GetDesc(&desc);
             g_activeMap = {resource, mapped->pData, desc.ByteWidth};
             buffer->Release();
+        } else {
+            ID3D11Texture2D* texture = nullptr;
+            if (SUCCEEDED(resource->QueryInterface(__uuidof(ID3D11Texture2D),
+                                                   reinterpret_cast<void**>(&texture)))) {
+                D3D11_TEXTURE2D_DESC desc{};
+                texture->GetDesc(&desc);
+                if (desc.Width == 1920 && (desc.Height == 1080 || desc.Height == 1440)) {
+                    g_activeMap.resource = resource;
+                    g_activeMap.data = mapped->pData;
+                    g_activeMap.rowPitch = mapped->RowPitch;
+                    g_activeMap.textureDesc = desc;
+                }
+                texture->Release();
+            }
         }
     }
     return result;
@@ -750,6 +873,9 @@ HRESULT STDMETHODCALLTYPE HookMap(ID3D11DeviceContext* context, ID3D11Resource* 
 void STDMETHODCALLTYPE HookUnmap(ID3D11DeviceContext* context, ID3D11Resource* resource,
                                  UINT subresource) {
     if (subresource == 0 && g_activeMap.resource == resource) {
+        if (g_activeMap.rowPitch)
+            TagStoryTexture(resource, g_activeMap.textureDesc, g_activeMap.data,
+                            g_activeMap.rowPitch, "Map");
         if (g_activeMap.byteWidth >= sizeof(g_bufferSnapshots[0].bytes) ||
             (g_backgroundMotionDiagnostics.load() && g_activeMap.byteWidth <= 4096)) {
             SaveBufferSnapshot(resource, g_activeMap.data, g_activeMap.byteWidth);
@@ -759,6 +885,80 @@ void STDMETHODCALLTYPE HookUnmap(ID3D11DeviceContext* context, ID3D11Resource* r
     if (ContextHooks* hooks = FindContextHooks(context); hooks && hooks->unmap) {
         hooks->unmap(context, resource, subresource);
     }
+}
+
+void STDMETHODCALLTYPE HookUpdateSubresource(ID3D11DeviceContext* context, ID3D11Resource* resource,
+                                             UINT subresource, const D3D11_BOX* box,
+                                             const void* source, UINT rowPitch, UINT depthPitch) {
+    if (resource && source && subresource == 0) {
+        ID3D11Texture2D* texture = nullptr;
+        if (SUCCEEDED(resource->QueryInterface(__uuidof(ID3D11Texture2D),
+                                               reinterpret_cast<void**>(&texture)))) {
+            D3D11_TEXTURE2D_DESC desc{};
+            texture->GetDesc(&desc);
+            const bool fullBox = !box ||
+                (box->left == 0 && box->top == 0 && box->front == 0 &&
+                 box->right == desc.Width && box->bottom == desc.Height && box->back == 1);
+            if (fullBox)
+                TagStoryTexture(resource, desc, source, rowPitch, "UpdateSubresource");
+            texture->Release();
+        }
+    }
+    if (ContextHooks* hooks = FindContextHooks(context); hooks && hooks->updateSubresource)
+        hooks->updateSubresource(context, resource, subresource, box, source, rowPitch, depthPitch);
+}
+
+void PropagateStoryTextureKind(ID3D11Resource* destination, ID3D11Resource* source) {
+    if (!destination || !source) return;
+    ID3D11Texture2D* destinationTexture = nullptr;
+    ID3D11Texture2D* sourceTexture = nullptr;
+    const bool textures = SUCCEEDED(destination->QueryInterface(__uuidof(ID3D11Texture2D),
+        reinterpret_cast<void**>(&destinationTexture))) &&
+        SUCCEEDED(source->QueryInterface(__uuidof(ID3D11Texture2D),
+        reinterpret_cast<void**>(&sourceTexture)));
+    if (textures) {
+        D3D11_TEXTURE2D_DESC destinationDesc{}, sourceDesc{};
+        destinationTexture->GetDesc(&destinationDesc);
+        sourceTexture->GetDesc(&sourceDesc);
+        if (destinationDesc.Width == 1920 &&
+            (destinationDesc.Height == 1080 || destinationDesc.Height == 1440) &&
+            destinationDesc.Width == sourceDesc.Width && destinationDesc.Height == sourceDesc.Height &&
+            destinationDesc.Format == sourceDesc.Format) {
+            const UINT kind = StoryTextureKind(source);
+            destination->SetPrivateData(kStoryTextureKindGuid, sizeof(kind), &kind);
+            static std::atomic<unsigned> logs{0};
+            if (kind != kStoryTextureOther && logs.fetch_add(1) < 16)
+                Log("Story texture copy: size=%ux%u kind=%u", destinationDesc.Width,
+                    destinationDesc.Height, kind);
+        }
+    }
+    SafeRelease(destinationTexture);
+    SafeRelease(sourceTexture);
+}
+
+void STDMETHODCALLTYPE HookCopySubresourceRegion(ID3D11DeviceContext* context,
+                                                  ID3D11Resource* destination, UINT destinationSubresource,
+                                                  UINT destinationX, UINT destinationY, UINT destinationZ,
+                                                  ID3D11Resource* source, UINT sourceSubresource,
+                                                  const D3D11_BOX* sourceBox) {
+    const bool fullSource = !sourceBox ||
+        (sourceBox->left == 0 && sourceBox->top == 0 && sourceBox->front == 0 &&
+         sourceBox->right == 1920 &&
+         (sourceBox->bottom == 1080 || sourceBox->bottom == 1440) && sourceBox->back == 1);
+    if (destinationSubresource == 0 && sourceSubresource == 0 &&
+        destinationX == 0 && destinationY == 0 && destinationZ == 0 && fullSource)
+        PropagateStoryTextureKind(destination, source);
+    if (ContextHooks* hooks = FindContextHooks(context); hooks && hooks->copySubresourceRegion)
+        hooks->copySubresourceRegion(context, destination, destinationSubresource,
+                                     destinationX, destinationY, destinationZ,
+                                     source, sourceSubresource, sourceBox);
+}
+
+void STDMETHODCALLTYPE HookCopyResource(ID3D11DeviceContext* context, ID3D11Resource* destination,
+                                         ID3D11Resource* source) {
+    PropagateStoryTextureKind(destination, source);
+    if (ContextHooks* hooks = FindContextHooks(context); hooks && hooks->copyResource)
+        hooks->copyResource(context, destination, source);
 }
 
 void UpdateRenderTargetDimensions(ID3D11RenderTargetView* view) {
@@ -1083,6 +1283,27 @@ int CandidateBackgroundSlot() {
     return TextureWidth(0).load() == 1920 && TextureHeight(0).load() >= 1400 ? 0 : -1;
 }
 
+bool AlreadyFramedBackgroundQuad(ID3D11DeviceContext* context, UINT vertexCount,
+                                 UINT startVertex, D3D11_PRIMITIVE_TOPOLOGY topology) {
+    if (CandidateBackgroundSlot() < 0 || vertexCount != 4 ||
+        topology != D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP) return false;
+    ID3D11Buffer* vertexBuffer = nullptr;
+    UINT stride = 0, offset = 0;
+    context->IAGetVertexBuffers(0, 1, &vertexBuffer, &stride, &offset);
+    BufferSnapshot snapshot{};
+    const bool captured = stride >= 36 && LoadBufferSnapshot(vertexBuffer, snapshot);
+    SafeRelease(vertexBuffer);
+    if (!captured || startVertex > (UINT_MAX - offset) / stride) return false;
+    const size_t start = static_cast<size_t>(offset) + static_cast<size_t>(startVertex) * stride;
+    if (start + 2 * static_cast<size_t>(stride) + sizeof(float) > snapshot.copiedBytes) return false;
+    float left = 0.0f, right = 0.0f;
+    std::memcpy(&left, snapshot.bytes + start, sizeof(left));
+    std::memcpy(&right, snapshot.bytes + start + 2 * stride, sizeof(right));
+    // The engine has already given these CGs a 4:3-width quad in the 16:9
+    // viewport. A second narrow viewport would make them only 9:16 wide.
+    return left > -0.79f && left < -0.71f && right > 0.71f && right < 0.79f;
+}
+
 void LogCandidateDraw(ID3D11DeviceContext* context, const char* call, UINT count) {
     const unsigned sequence = g_candidateLogCount.fetch_add(1);
     if (sequence >= 32) return;
@@ -1119,6 +1340,52 @@ void LogUiDraw(ID3D11DeviceContext* context, const char* call, UINT count) {
         vertexShader, pixelShader);
     SafeRelease(vertexShader);
     SafeRelease(pixelShader);
+}
+
+void LogSystemDialogDraw(ID3D11DeviceContext* context, const char* call,
+                         UINT count, UINT startVertex) {
+    if (g_internalDraw || !g_logging.load() || !g_systemDialogDiagnostics.load() ||
+        !g_overlayVisible.load()) return;
+    const unsigned sequence = g_systemDialogLogCount.fetch_add(1);
+    if (sequence >= 256) return;
+
+    D3D11_PRIMITIVE_TOPOLOGY topology{};
+    context->IAGetPrimitiveTopology(&topology);
+    D3D11_VIEWPORT viewport{};
+    UINT viewportCount = 1;
+    context->RSGetViewports(&viewportCount, &viewport);
+    ID3D11VertexShader* vertexShader = nullptr;
+    ID3D11GeometryShader* geometryShader = nullptr;
+    context->VSGetShader(&vertexShader, nullptr, nullptr);
+    context->GSGetShader(&geometryShader, nullptr, nullptr);
+    ID3D11Buffer* vertexBuffer = nullptr;
+    UINT stride = 0, offset = 0;
+    context->IAGetVertexBuffers(0, 1, &vertexBuffer, &stride, &offset);
+    BufferSnapshot snapshot{};
+    float first[9]{};
+    bool captured = false;
+    if (stride >= sizeof(first) && startVertex <= (UINT_MAX - offset) / stride &&
+        LoadBufferSnapshot(vertexBuffer, snapshot)) {
+        const UINT byteOffset = offset + startVertex * stride;
+        if (byteOffset <= snapshot.copiedBytes &&
+            sizeof(first) <= snapshot.copiedBytes - byteOffset) {
+            std::memcpy(first, snapshot.bytes + byteOffset, sizeof(first));
+            captured = true;
+        }
+    }
+    Log("Dialog trace #%u: %s count=%u start=%u mode=%ld topology=%u t0=%ux%u "
+        "viewport=[%.1f,%.1f,%.1f,%.1f] story=%d system=%d message=%d "
+        "VS=%p GS=%p VB=%p stride=%u offset=%u vertex=%d "
+        "xy=[%.5f,%.5f] uv=[%.5f,%.5f]",
+        sequence + 1, call, count, startVertex, g_aspectMode.load(),
+        static_cast<unsigned>(topology), TextureWidth(0).load(), TextureHeight(0).load(),
+        viewport.TopLeftX, viewport.TopLeftY, viewport.Width, viewport.Height,
+        StoryPillarboxActive(), g_systemUiSeen.load(), g_messageUiSeen.load(),
+        vertexShader, geometryShader, vertexBuffer, stride, offset, captured,
+        first[0], first[1], first[7], first[8]);
+    SafeRelease(vertexBuffer);
+    SafeRelease(vertexShader);
+    SafeRelease(geometryShader);
 }
 
 unsigned UiGeometryClass() {
@@ -1248,7 +1515,8 @@ void LogUiGeometry(ID3D11DeviceContext* context) {
     SafeRelease(constantBuffers[1]);
 }
 
-bool BeginBackgroundCorrection(ID3D11DeviceContext* context, D3D11_VIEWPORT& originalViewport) {
+bool BeginBackgroundCorrection(ID3D11DeviceContext* context, D3D11_VIEWPORT& originalViewport,
+                               bool alreadyFramed = false) {
     if (g_internalDraw || static_cast<AspectMode>(g_aspectMode.load()) != AspectMode::Pillarbox) {
         return false;
     }
@@ -1266,6 +1534,15 @@ bool BeginBackgroundCorrection(ID3D11DeviceContext* context, D3D11_VIEWPORT& ori
     const bool sourceBackgroundShader = g_frameBackgroundVertexShader.load() == currentVertexShader;
     SafeRelease(currentVertexShader);
     if (!sourceBackgroundShader) return false;
+    if (alreadyFramed) {
+        g_lastBackgroundAdjusted.store(true);
+        g_storyPillarboxActive.store(true);
+        static std::atomic<unsigned> traceCount{0};
+        if (traceCount.fetch_add(1) < 8)
+            Log("4:3 background already framed by game: texture=%ux%u; leaving quad unchanged",
+                TextureWidth(0).load(), TextureHeight(0).load());
+        return false;
+    }
 
     UINT count = 1;
     context->RSGetViewports(&count, &originalViewport);
@@ -1296,6 +1573,56 @@ bool BeginBackgroundCorrection(ID3D11DeviceContext* context, D3D11_VIEWPORT& ori
     return true;
 }
 
+bool BeginFlatStoryBackgroundCorrection(ID3D11DeviceContext* context, UINT vertexCount,
+                                        D3D11_PRIMITIVE_TOPOLOGY topology,
+                                        D3D11_VIEWPORT& originalViewport) {
+    // The port draws solid story frames and some already-framed CGs from
+    // 1920x1080 textures. The 4:3 artwork detector ignores this size, so
+    // mask only its first fullscreen story draw to the existing pillarbox.
+    // Some 1920x1080 frames already contain a centred 4:3 CG; narrowing the
+    // viewport would shrink those images a second time. Later sprites and UI
+    // still draw with their normal viewport.
+    if (g_internalDraw || vertexCount != 4 ||
+        topology != D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP ||
+        TextureWidth(0).load() != 1920 || TextureHeight(0).load() != 1080) return false;
+    // The launcher uses the same 1920x1080 textures and can inherit the
+    // persistent story marker. It is not a story screen.
+    if (!StoryGameModuleLoaded()) {
+        static std::atomic<unsigned> launcherTraceCount{0};
+        if (launcherTraceCount.fetch_add(1) < 4)
+            Log("4:3 flat background skipped: game selector (story DLL not loaded)");
+        g_storyPillarboxActive.store(false);
+        return false;
+    }
+    if (!StoryPillarboxActive() || !WhiteStoryTextureBound(context) || g_systemUiSeen.load() ||
+        g_backgroundCleared.load() || g_messageUiSeen.load()) return false;
+
+    UINT count = 1;
+    context->RSGetViewports(&count, &originalViewport);
+    if (!count || originalViewport.Height <= 0.0f ||
+        originalViewport.Width / originalViewport.Height < 1.5f) return false;
+    const float correctedWidth = originalViewport.Height * (4.0f / 3.0f);
+    if (correctedWidth >= originalViewport.Width - 1.0f) return false;
+    if (!g_flatStoryPixelShader.load(std::memory_order_acquire) ||
+        !g_flatStoryViewportBuffer.load(std::memory_order_acquire)) return false;
+
+    if (!g_backgroundCleared.exchange(true)) {
+        ID3D11RenderTargetView* target = nullptr;
+        context->OMGetRenderTargets(1, &target, nullptr);
+        if (target) {
+            constexpr float black[4]{0.0f, 0.0f, 0.0f, 1.0f};
+            context->ClearRenderTargetView(target, black);
+            target->Release();
+        }
+    }
+    g_lastBackgroundAdjusted.store(true);
+    static std::atomic<unsigned> traceCount{0};
+    if (traceCount.fetch_add(1) < 8)
+        Log("4:3 flat story background: texture=1920x1080 viewport=%.0fx%.0f; masking side bars without scaling",
+            originalViewport.Width, originalViewport.Height);
+    return true;
+}
+
 bool IsUiChromeTexture() {
     const UINT width = TextureWidth(0).load();
     const UINT height = TextureHeight(0).load();
@@ -1322,7 +1649,7 @@ bool IsAdvTextboxAtlasDraw(ID3D11DeviceContext* context, UINT vertexCount) {
 }
 
 bool TextboxStyleIsOriginal() {
-    return g_textboxOpacity.load() == 100 && g_textboxColorR.load() == 255 &&
+    return !g_uniformTextboxOpacity.load() && g_textboxOpacity.load() == 100 && g_textboxColorR.load() == 255 &&
            g_textboxColorG.load() == 255 && g_textboxColorB.load() == 255 &&
            !g_hideAutoSkipButtons.load();
 }
@@ -1344,14 +1671,16 @@ struct TextboxStyleScope {
             float opacity;
             float hideAutoSkip;
             float atlasHeight;
-            float padding[2];
+            float uniformOpacity;
+            float padding;
         } constants{
             {g_textboxColorR.load() / 255.0f, g_textboxColorG.load() / 255.0f,
              g_textboxColorB.load() / 255.0f},
             g_textboxOpacity.load() / 100.0f,
             g_hideAutoSkipButtons.load() ? 1.0f : 0.0f,
             static_cast<float>(TextureHeight(0).load()),
-            {0.0f, 0.0f}
+            g_uniformTextboxOpacity.load() ? 1.0f : 0.0f,
+            0.0f
         };
         static_assert(sizeof(StyleConstants) == 32);
         context->PSGetShader(&originalShader, nullptr, nullptr);
@@ -1366,6 +1695,36 @@ struct TextboxStyleScope {
         if (!active) return;
         context->PSSetShader(originalShader, nullptr, 0);
         context->PSSetConstantBuffers(7, 1, &originalBuffer);
+        SafeRelease(originalShader);
+        SafeRelease(originalBuffer);
+    }
+};
+
+struct FlatStoryPillarboxScope {
+    ID3D11DeviceContext* context = nullptr;
+    ID3D11PixelShader* originalShader = nullptr;
+    ID3D11Buffer* originalBuffer = nullptr;
+    bool active = false;
+
+    FlatStoryPillarboxScope(ID3D11DeviceContext* drawContext, bool flatStoryDraw,
+                            const D3D11_VIEWPORT& viewport) : context(drawContext) {
+        if (!flatStoryDraw) return;
+        ID3D11PixelShader* shader = g_flatStoryPixelShader.load(std::memory_order_acquire);
+        ID3D11Buffer* buffer = g_flatStoryViewportBuffer.load(std::memory_order_acquire);
+        if (!shader || !buffer) return;
+        const float bounds[4]{viewport.TopLeftX, viewport.TopLeftY, viewport.Width, viewport.Height};
+        context->PSGetShader(&originalShader, nullptr, nullptr);
+        context->PSGetConstantBuffers(8, 1, &originalBuffer);
+        context->UpdateSubresource(buffer, 0, nullptr, bounds, 0, 0);
+        context->PSSetShader(shader, nullptr, 0);
+        context->PSSetConstantBuffers(8, 1, &buffer);
+        active = true;
+    }
+
+    ~FlatStoryPillarboxScope() {
+        if (!active) return;
+        context->PSSetShader(originalShader, nullptr, 0);
+        context->PSSetConstantBuffers(8, 1, &originalBuffer);
         SafeRelease(originalShader);
         SafeRelease(originalBuffer);
     }
@@ -1414,6 +1773,7 @@ bool UseMayNvlCorrection() {
 
 void STDMETHODCALLTYPE HookDraw(ID3D11DeviceContext* context, UINT vertexCount, UINT startVertex) {
     SceneScope sceneScope(context);
+    LogSystemDialogDraw(context, "Draw", vertexCount, startVertex);
     if (!g_internalDraw && static_cast<AspectMode>(g_aspectMode.load()) == AspectMode::Pillarbox &&
         !g_systemUiSeen.load() && g_engineNvlLayout.load()) {
         // Panel-free NVL can likewise begin on a black frame.
@@ -1432,12 +1792,19 @@ void STDMETHODCALLTYPE HookDraw(ID3D11DeviceContext* context, UINT vertexCount, 
     context->IAGetPrimitiveTopology(&topology);
     if (!g_internalDraw) LogBackgroundMotionGeometry(context, vertexCount, startVertex, topology);
     D3D11_VIEWPORT viewport{};
-    const bool backgroundCorrected = BeginBackgroundCorrection(context, viewport);
-    const bool uiCorrected = !backgroundCorrected && BeginUiChromeCorrection(context, viewport);
+    const bool flatStoryBackground = BeginFlatStoryBackgroundCorrection(
+        context, vertexCount, topology, viewport);
+    const bool alreadyFramedBackground = AlreadyFramedBackgroundQuad(context, vertexCount, startVertex, topology) ||
+        (CandidateBackgroundSlot() >= 0 && StoryTextureKindBound(context) == kStoryTexturePreframed);
+    const bool backgroundCorrected = !flatStoryBackground &&
+                                     BeginBackgroundCorrection(context, viewport, alreadyFramedBackground);
+    const bool uiCorrected = !flatStoryBackground && !backgroundCorrected &&
+                             BeginUiChromeCorrection(context, viewport);
     const bool corrected = backgroundCorrected || uiCorrected;
     ContextHooks* hooks = FindContextHooks(context);
     if (!hooks || !hooks->draw) return;
     TextboxStyleScope textboxStyle(context, IsAdvTextboxAtlasDraw(context, vertexCount));
+    FlatStoryPillarboxScope flatStoryPillarbox(context, flatStoryBackground, viewport);
 
     ID3D11VertexShader* originalVertexShader = nullptr;
     ID3D11InputLayout* originalInputLayout = nullptr;
@@ -1539,6 +1906,7 @@ void STDMETHODCALLTYPE HookDraw(ID3D11DeviceContext* context, UINT vertexCount, 
 void STDMETHODCALLTYPE HookDrawIndexed(ID3D11DeviceContext* context, UINT indexCount,
                                        UINT startIndex, INT baseVertex) {
     SceneScope sceneScope(context);
+    LogSystemDialogDraw(context, "DrawIndexed", indexCount, static_cast<UINT>(baseVertex));
     DiagnoseDraw(context, true, indexCount);
     if (!g_internalDraw && g_overlayVisible.load() && g_lastBackgroundAdjusted.load() &&
         CandidateBackgroundSlot() < 0) {
@@ -1651,6 +2019,10 @@ public:
         SafeRelease(pixelShader_);
         g_textboxPixelShader.store(nullptr, std::memory_order_release);
         g_textboxStyleBuffer.store(nullptr, std::memory_order_release);
+        g_flatStoryPixelShader.store(nullptr, std::memory_order_release);
+        g_flatStoryViewportBuffer.store(nullptr, std::memory_order_release);
+        SafeRelease(flatStoryViewportBuffer_);
+        SafeRelease(flatStoryPixelShader_);
         SafeRelease(textboxStyleBuffer_);
         SafeRelease(textboxPixelShader_);
         g_backgroundVertexShader.store(nullptr, std::memory_order_release);
@@ -1793,8 +2165,10 @@ cbuffer TextboxStyleBuffer : register(b7) {
     float textboxOpacity;
     float hideAutoSkip;
     float atlasHeight;
-    float2 stylePadding;
+    float uniformOpacity;
+    float stylePadding;
 };
+cbuffer FlatStoryViewportBuffer : register(b8) { float4 flatStoryViewport; };
 struct Output { float4 position : SV_Position; float4 color : COLOR0; float2 uv : TEXCOORD0; };
 Output VSMain(uint id : SV_VertexID) {
     float2 positions[6] = {
@@ -1937,6 +2311,13 @@ Texture2D image : register(t0);
 SamplerState imageSampler : register(s0);
 float4 PSMain(Output input) : SV_Target { return image.Sample(imageSampler, input.uv); }
 float4 SolidPS(Output input) : SV_Target { return float4(0, 0, 0, 1); }
+float4 FlatStoryPS(Output input) : SV_Target {
+    float barWidth = (flatStoryViewport.z - flatStoryViewport.w * (4.0 / 3.0)) * 0.5;
+    float left = flatStoryViewport.x + barWidth;
+    float right = flatStoryViewport.x + flatStoryViewport.z - barWidth;
+    if (input.position.x < left || input.position.x >= right) return float4(0, 0, 0, 1);
+    return image.Sample(imageSampler, input.uv) * input.color;
+}
 float4 TextboxPS(Output input) : SV_Target {
     // Both games keep all four active/inactive AUTO and SKIP button images
     // together in meschip.png. Mask atlas pixels, not screen coordinates, so
@@ -1949,7 +2330,8 @@ float4 TextboxPS(Output input) : SV_Target {
         : atlasPixel.x >= 315.0 && atlasPixel.x < 815.0 &&
           atlasPixel.y >= 410.0 && atlasPixel.y < 460.0;
     if (hideAutoSkip > 0.5 && buttonPixel) discard;
-    float4 pixel = image.Sample(imageSampler, input.uv) * input.color;
+    float4 source = image.Sample(imageSampler, input.uv);
+    float4 pixel = source * input.color;
     // The 1920-wide ADV panel occupies the upper-left part of the shared
     // 4096x460/464 atlas. Limit styling by source UV instead of screen-space
     // geometry: the engine changes the latter while fading between messages.
@@ -1964,7 +2346,14 @@ float4 TextboxPS(Output input) : SV_Target {
         float intensity = max(pixel.r, max(pixel.g, pixel.b));
         pixel.rgb = intensity * textboxTint;
     }
-    pixel.a = saturate(pixel.a * textboxOpacity);
+    if (uniformOpacity > 0.5) {
+        // Use source alpha only as a transparent-edge mask, not as the panel's
+        // vertical gradient. Keep the engine's per-draw fade alpha intact.
+        pixel.a = saturate(textboxOpacity * 0.5) * input.color.a *
+                  saturate(source.a * 32.0);
+    } else {
+        pixel.a = saturate(pixel.a * textboxOpacity);
+    }
     return pixel;
 }
 )";
@@ -1978,6 +2367,7 @@ float4 TextboxPS(Output input) : SV_Target {
         ID3DBlob* ps = nullptr;
         ID3DBlob* solidPs = nullptr;
         ID3DBlob* textboxPs = nullptr;
+        ID3DBlob* flatStoryPs = nullptr;
         if (!CompileShader(shaderSource, "VSMain", "vs_4_0", &vs) ||
             !CompileShader(shaderSource, "BackgroundVS", "vs_4_0", &backgroundVs) ||
             !CompileShader(shaderSource, "NvlFontVS", "vs_4_0", &nvlFontVs) ||
@@ -1985,7 +2375,8 @@ float4 TextboxPS(Output input) : SV_Target {
             !CompileShader(shaderSource, "MaybeFontGS", "gs_4_0", &maybeFontGs) ||
             !CompileShader(shaderSource, "PSMain", "ps_4_0", &ps) ||
             !CompileShader(shaderSource, "SolidPS", "ps_4_0", &solidPs) ||
-            !CompileShader(shaderSource, "TextboxPS", "ps_4_0", &textboxPs)) {
+            !CompileShader(shaderSource, "TextboxPS", "ps_4_0", &textboxPs) ||
+            !CompileShader(shaderSource, "FlatStoryPS", "ps_4_0", &flatStoryPs)) {
             SafeRelease(vs);
             SafeRelease(backgroundVs);
             SafeRelease(nvlFontVs);
@@ -1994,6 +2385,7 @@ float4 TextboxPS(Output input) : SV_Target {
             SafeRelease(ps);
             SafeRelease(solidPs);
             SafeRelease(textboxPs);
+            SafeRelease(flatStoryPs);
             return false;
         }
         HRESULT result = device_->CreateVertexShader(vs->GetBufferPointer(), vs->GetBufferSize(), nullptr, &vertexShader_);
@@ -2045,6 +2437,7 @@ float4 TextboxPS(Output input) : SV_Target {
         if (SUCCEEDED(result)) result = device_->CreatePixelShader(ps->GetBufferPointer(), ps->GetBufferSize(), nullptr, &pixelShader_);
         if (SUCCEEDED(result)) result = device_->CreatePixelShader(solidPs->GetBufferPointer(), solidPs->GetBufferSize(), nullptr, &solidPixelShader_);
         if (SUCCEEDED(result)) result = device_->CreatePixelShader(textboxPs->GetBufferPointer(), textboxPs->GetBufferSize(), nullptr, &textboxPixelShader_);
+        if (SUCCEEDED(result)) result = device_->CreatePixelShader(flatStoryPs->GetBufferPointer(), flatStoryPs->GetBufferSize(), nullptr, &flatStoryPixelShader_);
         SafeRelease(vs);
         SafeRelease(backgroundVs);
         SafeRelease(backgroundMotionGs);
@@ -2054,6 +2447,7 @@ float4 TextboxPS(Output input) : SV_Target {
         SafeRelease(ps);
         SafeRelease(solidPs);
         SafeRelease(textboxPs);
+        SafeRelease(flatStoryPs);
         if (FAILED(result)) return false;
         g_backgroundVertexShader.store(backgroundVertexShader_, std::memory_order_release);
         g_backgroundMotionGeometryShader.store(backgroundMotionGeometryShader_, std::memory_order_release);
@@ -2063,6 +2457,7 @@ float4 TextboxPS(Output input) : SV_Target {
         g_advNameGeometryShader.store(advNameGeometryShader_, std::memory_order_release);
         g_maybeFontGeometryShader.store(maybeFontGeometryShader_, std::memory_order_release);
         g_textboxPixelShader.store(textboxPixelShader_, std::memory_order_release);
+        g_flatStoryPixelShader.store(flatStoryPixelShader_, std::memory_order_release);
 
         D3D11_BUFFER_DESC bufferDesc{};
         bufferDesc.ByteWidth = sizeof(Transform);
@@ -2077,6 +2472,12 @@ float4 TextboxPS(Output input) : SV_Target {
         textboxBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
         if (FAILED(device_->CreateBuffer(&textboxBufferDesc, nullptr, &textboxStyleBuffer_))) return false;
         g_textboxStyleBuffer.store(textboxStyleBuffer_, std::memory_order_release);
+        D3D11_BUFFER_DESC flatStoryBufferDesc{};
+        flatStoryBufferDesc.ByteWidth = 16;
+        flatStoryBufferDesc.Usage = D3D11_USAGE_DEFAULT;
+        flatStoryBufferDesc.BindFlags = D3D11_BIND_CONSTANT_BUFFER;
+        if (FAILED(device_->CreateBuffer(&flatStoryBufferDesc, nullptr, &flatStoryViewportBuffer_))) return false;
+        g_flatStoryViewportBuffer.store(flatStoryViewportBuffer_, std::memory_order_release);
 
         D3D11_SAMPLER_DESC samplerDesc{};
         samplerDesc.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR;
@@ -2240,7 +2641,9 @@ float4 TextboxPS(Output input) : SV_Target {
         TextOutW(panelDc_, 24, 94, line, static_cast<int>(wcslen(line)));
 
         swprintf(line, 256, L"%lc Textbox opacity:  %ld%% %ls", selected == 2 ? L'>' : L' ',
-                 g_textboxOpacity.load(), g_textboxOpacity.load() == 100 ? L"(original)" : L"");
+                 g_textboxOpacity.load(),
+                 g_textboxOpacity.load() == 100 && !g_uniformTextboxOpacity.load()
+                     ? L"(original)" : L"");
         SetTextColor(panelDc_, selected == 2 ? RGB(102, 224, 220) : RGB(235, 240, 247));
         TextOutW(panelDc_, 24, 125, line, static_cast<int>(wcslen(line)));
         drawSlider(125, g_textboxOpacity.load(), 200, RGB(58, 201, 196));
@@ -2286,10 +2689,14 @@ float4 TextboxPS(Output input) : SV_Target {
                  g_hideAutoSkipButtons.load() ? L"On" : L"Off");
         SetTextColor(panelDc_, selected == 10 ? RGB(102, 224, 220) : RGB(235, 240, 247));
         TextOutW(panelDc_, 24, 373, line, static_cast<int>(wcslen(line)));
+        swprintf(line, 256, L"%lc Uniform textbox opacity: %ls (slider / 2)",
+                 selected == 11 ? L'>' : L' ', g_uniformTextboxOpacity.load() ? L"On" : L"Off");
+        SetTextColor(panelDc_, selected == 11 ? RGB(102, 224, 220) : RGB(235, 240, 247));
+        TextOutW(panelDc_, 24, 404, line, static_cast<int>(wcslen(line)));
         SetTextColor(panelDc_, RGB(235, 240, 247));
         const std::wstring hotkey = HotkeyName(g_hotkey.load());
         swprintf(line, 256, L"  Overlay hotkey:    %ls", hotkey.c_str());
-        TextOutW(panelDc_, 24, 404, line, static_cast<int>(wcslen(line)));
+        TextOutW(panelDc_, 24, 435, line, static_cast<int>(wcslen(line)));
 
         SetTextColor(panelDc_, RGB(170, 181, 194));
         if (!g_highResolution.load()) {
@@ -2300,11 +2707,11 @@ float4 TextboxPS(Output input) : SV_Target {
         } else {
             swprintf(line, 256, L"  High-resolution rendering: On (inactive at this resolution)");
         }
-        TextOutW(panelDc_, 24, 446, line, static_cast<int>(wcslen(line)));
+        TextOutW(panelDc_, 24, 477, line, static_cast<int>(wcslen(line)));
 
         SetTextColor(panelDc_, RGB(130, 142, 157));
         constexpr wchar_t controls[] = L"Up/Down: select  Left/Right: change  Esc: close";
-        TextOutW(panelDc_, 24, 490, controls, static_cast<int>(wcslen(controls)));
+        TextOutW(panelDc_, 24, 521, controls, static_cast<int>(wcslen(controls)));
         SelectObject(panelDc_, oldFont);
         DeleteObject(titleFont);
         DeleteObject(bodyFont);
@@ -2323,7 +2730,7 @@ float4 TextboxPS(Output input) : SV_Target {
     }
 
     static constexpr int panelWidth_ = 660;
-    static constexpr int panelHeight_ = 531;
+    static constexpr int panelHeight_ = 562;
     ID3D11Device* device_ = nullptr;
     ID3D11DeviceContext* context_ = nullptr;
     ID3D11VertexShader* vertexShader_ = nullptr;
@@ -2337,8 +2744,10 @@ float4 TextboxPS(Output input) : SV_Target {
     ID3D11PixelShader* pixelShader_ = nullptr;
     ID3D11PixelShader* solidPixelShader_ = nullptr;
     ID3D11PixelShader* textboxPixelShader_ = nullptr;
+    ID3D11PixelShader* flatStoryPixelShader_ = nullptr;
     ID3D11Buffer* constantBuffer_ = nullptr;
     ID3D11Buffer* textboxStyleBuffer_ = nullptr;
+    ID3D11Buffer* flatStoryViewportBuffer_ = nullptr;
     ID3D11SamplerState* sampler_ = nullptr;
     ID3D11BlendState* blendState_ = nullptr;
     ID3D11DepthStencilState* depthState_ = nullptr;
@@ -2418,6 +2827,7 @@ void ToggleOverlay() {
         g_backgroundMotionLogCount.store(0);
         g_backgroundMotionLastLogTick.store(0);
         g_uiLogCount.store(0);
+        g_systemDialogLogCount.store(0);
         g_geometryLogMask.store(0);
     }
 }
@@ -2452,8 +2862,8 @@ LRESULT CALLBACK HookWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
             if (!repeated && (wParam == VK_UP || wParam == VK_DOWN)) {
                 LONG selection = g_overlaySelection.load();
                 selection += (wParam == VK_DOWN) ? 1 : -1;
-                if (selection < 0) selection = 10;
-                if (selection > 10) selection = 0;
+                if (selection < 0) selection = 11;
+                if (selection > 11) selection = 0;
                 g_overlaySelection.store(selection);
                 return 0;
             }
@@ -2504,6 +2914,12 @@ LRESULT CALLBACK HookWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
                     g_hideAutoSkipButtons.store(hide);
                     SaveAutoSkipButtons();
                     Log("AUTO/SKIP button visuals hidden=%d", hide);
+                } else if (selection == 11) {
+                    const bool enabled = !g_uniformTextboxOpacity.load();
+                    g_uniformTextboxOpacity.store(enabled);
+                    SaveUniformTextboxOpacity();
+                    Log("Uniform textbox opacity changed to %d (target alpha=%ld%%)",
+                        enabled, g_textboxOpacity.load() / 2);
                 } else {
                     std::atomic<LONG>* value = nullptr;
                     LONG maximum = 255;
@@ -2527,6 +2943,7 @@ LRESULT CALLBACK HookWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
                 }
                 g_candidateLogCount.store(0);
                 g_uiLogCount.store(0);
+                g_systemDialogLogCount.store(0);
                 g_geometryLogMask.store(0);
                 DiagnoseContexts();
                 return 0;
@@ -2650,6 +3067,9 @@ void HookContext(ID3D11DeviceContext* context) {
     const bool targets = refresh(33, HookOMSetRenderTargets, entry->omSetRenderTargets);
     const bool viewports = refresh(44, HookRSSetViewports, entry->rsSetViewports);
     const bool scissors = refresh(45, HookRSSetScissorRects, entry->rsSetScissorRects);
+    const bool copyRegion = refresh(46, HookCopySubresourceRegion, entry->copySubresourceRegion);
+    const bool copyResource = refresh(47, HookCopyResource, entry->copyResource);
+    const bool uploads = refresh(48, HookUpdateSubresource, entry->updateSubresource);
     if (g_nativeWindows) refresh(114, HookFinishCommandList, entry->finishCommandList);
     if (g_nativeWindows) {
         refresh(11, HookVSSetShader, entry->vsSetShader);
@@ -2661,13 +3081,15 @@ void HookContext(ID3D11DeviceContext* context) {
     if (!newlyTracked) {
         static std::atomic<unsigned> refreshLogs{0};
         if (changed && refreshLogs.fetch_add(1) < 32) {
-            Log("Native context dispatch refreshed: context=%p PSSetSRV=%d DrawIndexed=%d Draw=%d Map=%d Unmap=%d OMSetRT=%d RSSetVP=%d RSSetScissor=%d",
-                context, ps, indexed, draw, map, unmap, targets, viewports, scissors);
+            Log("Native context dispatch refreshed: context=%p PSSetSRV=%d DrawIndexed=%d Draw=%d Map=%d Unmap=%d OMSetRT=%d RSSetVP=%d RSSetScissor=%d CopyRegion=%d CopyResource=%d UpdateSubresource=%d",
+                context, ps, indexed, draw, map, unmap, targets, viewports, scissors,
+                copyRegion, copyResource, uploads);
         }
         return;
     }
-    Log("D3D11 context hooked: context=%p vtable=%p PSSetSRV=%d DrawIndexed=%d Draw=%d Map=%d Unmap=%d OMSetRT=%d RSSetVP=%d RSSetScissor=%d",
-        context, vtable, ps, indexed, draw, map, unmap, targets, viewports, scissors);
+    Log("D3D11 context hooked: context=%p vtable=%p PSSetSRV=%d DrawIndexed=%d Draw=%d Map=%d Unmap=%d OMSetRT=%d RSSetVP=%d RSSetScissor=%d CopyRegion=%d CopyResource=%d UpdateSubresource=%d",
+        context, vtable, ps, indexed, draw, map, unmap, targets, viewports, scissors,
+        copyRegion, copyResource, uploads);
     ID3D11Device* owner = nullptr;
     context->GetDevice(&owner);
     Log("Diagnostic context owner: context=%p device=%p type=%u (0=immediate,1=deferred)",
@@ -2704,6 +3126,9 @@ HRESULT STDMETHODCALLTYPE HookCreateTexture2D(ID3D11Device* device,
     }
     const HRESULT result = g_originalCreateTexture2D(device, engineTarget ? &adjusted : description,
                                                      initialData, texture);
+    if (SUCCEEDED(result) && texture && *texture && initialData)
+        TagStoryTexture(*texture, *description, initialData->pSysMem,
+                        initialData->SysMemPitch, "CreateTexture2D");
     if (engineTarget) {
         static std::atomic<unsigned> logs{0};
         if (logs.fetch_add(1) < 32) {

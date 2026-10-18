@@ -22,8 +22,8 @@ Most story backgrounds and CGs are already stored as 4:3 assets, but the PC port
 The fix watches D3D11 texture bindings and identifies those original 4:3 images by their dimensions and render sequence.
 Matching story draws receive full-image texture coordinates and a centered 4:3 viewport with black pillarboxes.
 ADV and NVL text/UI are recognized from their texture atlases and geometry, then repositioned to fit the restored image.
-The active story layout is retained across the port's 16:9 black/backgroundless frames, keeping their UI in 4:3.
-Known widescreen system screens and menus are excluded so their native layouts remain unchanged.
+The active story layout is retained across the port's black/backgroundless frames; its fullscreen white story frames are also confined to the 4:3 image area.
+The game selector and known widescreen system screens and menus are excluded so their native layouts remain unchanged.
 
 This experimental 64-bit `dinput8.dll` proxy covers both **My Merry May** and
 **My Merry Maybe**. It forwards DirectInput to the real Windows/Wine DLL, hooks
@@ -97,6 +97,7 @@ TextboxColorR=255
 TextboxColorG=255
 TextboxColorB=255
 HideAutoSkipButtons=0
+UniformTextboxOpacity=0
 ```
 
 `HideAutoSkipButtons=1` hides the ADV AUTO/SKIP graphics in both games, including
@@ -105,6 +106,13 @@ to the INI. The replacement shader is disabled at the defaults above. Opacity
 and colour affect only the ADV textbox region, including its message-transition
 copies; the hide switch affects only the button images. Speaker chrome, ADV
 glyphs, NVL, backlog, and system menus retain their original style.
+
+The bottom gradient shown in some narration scenes is also part of the ADV
+panel texture. `UniformTextboxOpacity=1` (also in the overlay) replaces that
+texture's vertical alpha gradient with a uniform alpha. In this mode the
+opacity slider maps 0–200 to 0–100% actual opacity; 100 gives 50%. Transparent
+panel edges and the game's transition fades are retained. This targets the
+ADV panel in both games, not NVL or other UI artwork.
 
 ## Sprites over bars
 `SpritesOverPillarbox=1` (the default) preserves the PC port's extra widescreen
@@ -182,6 +190,11 @@ If Wine reports an unexpected monitor size, enable `Logging=1` and
 `DisplayDiagnostics=1` in `[Debug]`, then restart. The log compares Win32
 monitor modes, active display configuration, DPI, window size, and DXGI output
 at startup and swapchain creation. These checks are read-only.
+
+For misaligned system confirmation text, `SystemDialogDiagnostics=1` in
+`[Debug]` logs up to 256 draw calls after F12 opens. Capture the same box once
+in 16:9 and once in 4:3; the trace records texture, viewport, and text-quad
+positions without changing the image.
 
 `MyMerryMayFix.log` is created beside the DLL. When reporting a problem, include
 that log and screenshots with the overlay open in both story mode and gallery
