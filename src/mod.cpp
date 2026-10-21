@@ -1730,7 +1730,35 @@ struct FlatStoryPillarboxScope {
     }
 };
 
-bool BeginUiChromeCorrection(ID3D11DeviceContext* context, D3D11_VIEWPORT& originalViewport) {
+bool IsWideSystemPopupPanel(ID3D11DeviceContext* context, UINT vertexCount, UINT startVertex,
+                            D3D11_PRIMITIVE_TOPOLOGY topology) {
+    if (TextureWidth(0).load() != 4096 || TextureHeight(0).load() != 460 ||
+        vertexCount != 4 || topology != D3D11_PRIMITIVE_TOPOLOGY_TRIANGLESTRIP) return false;
+    // May's NVL UI uses a different panel texture (512x923). In NVL layout,
+    // the 4096x460 atlas is the system/Append popup, which keeps its 16:9
+    // width and consists of two quads. This engine state is stable across
+    // frames; streaming-buffer offsets and CPU vertex snapshots are not.
+    if (g_engineNvlLayout.load()) return true;
+    ID3D11Buffer* vertexBuffer = nullptr;
+    UINT stride = 0, offset = 0;
+    context->IAGetVertexBuffers(0, 1, &vertexBuffer, &stride, &offset);
+    BufferSnapshot snapshot{};
+    const bool captured = stride >= 36 && LoadBufferSnapshot(vertexBuffer, snapshot);
+    SafeRelease(vertexBuffer);
+    if (!captured || startVertex > (UINT_MAX - offset) / stride) return false;
+    const size_t start = static_cast<size_t>(offset) + static_cast<size_t>(startVertex) * stride;
+    if (start + 9 * sizeof(float) > snapshot.copiedBytes) return false;
+    float vertex[9]{};
+    std::memcpy(vertex, snapshot.bytes + start, sizeof(vertex));
+    // The Append story / confirmation panel uses a separate atlas rectangle
+    // from the ADV textbox. Match its UVs, not its position: the opening and
+    // closing animation changes the quad geometry from frame to frame.
+    return vertex[7] > 0.468f && vertex[7] < 0.472f &&
+           vertex[8] > 0.003f && vertex[8] < 0.006f;
+}
+
+bool BeginUiChromeCorrection(ID3D11DeviceContext* context, D3D11_VIEWPORT& originalViewport,
+                             bool preserveWideSystemPopup) {
     if (g_internalDraw || static_cast<AspectMode>(g_aspectMode.load()) != AspectMode::Pillarbox ||
         g_systemUiSeen.load() || !IsUiChromeTexture()) {
         return false;
@@ -1755,6 +1783,7 @@ bool BeginUiChromeCorrection(ID3D11DeviceContext* context, D3D11_VIEWPORT& origi
         g_nvlUiSeen.store(true);
     }
     g_messageUiSeen.store(true);
+    if (preserveWideSystemPopup) return false;
     D3D11_VIEWPORT corrected = originalViewport;
     corrected.TopLeftX += (originalViewport.Width - correctedWidth) * 0.5f;
     corrected.Width = correctedWidth;
@@ -1799,7 +1828,8 @@ void STDMETHODCALLTYPE HookDraw(ID3D11DeviceContext* context, UINT vertexCount, 
     const bool backgroundCorrected = !flatStoryBackground &&
                                      BeginBackgroundCorrection(context, viewport, alreadyFramedBackground);
     const bool uiCorrected = !flatStoryBackground && !backgroundCorrected &&
-                             BeginUiChromeCorrection(context, viewport);
+                             BeginUiChromeCorrection(context, viewport,
+                                 IsWideSystemPopupPanel(context, vertexCount, startVertex, topology));
     const bool corrected = backgroundCorrected || uiCorrected;
     ContextHooks* hooks = FindContextHooks(context);
     if (!hooks || !hooks->draw) return;
@@ -1918,7 +1948,7 @@ void STDMETHODCALLTYPE HookDrawIndexed(ID3D11DeviceContext* context, UINT indexC
     }
     D3D11_VIEWPORT viewport{};
     const bool backgroundCorrected = BeginBackgroundCorrection(context, viewport);
-    const bool uiCorrected = !backgroundCorrected && BeginUiChromeCorrection(context, viewport);
+    const bool uiCorrected = !backgroundCorrected && BeginUiChromeCorrection(context, viewport, false);
     const bool corrected = backgroundCorrected || uiCorrected;
     ContextHooks* hooks = FindContextHooks(context);
     if (!hooks || !hooks->drawIndexed) return;
@@ -2612,7 +2642,7 @@ float4 TextboxPS(Output input) : SV_Target {
                                     DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                     CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI");
         HGDIOBJ oldFont = SelectObject(panelDc_, titleFont);
-        TextOutW(panelDc_, 24, 18, L"My Merry May Fix 1.0.5", 22);
+        TextOutW(panelDc_, 24, 18, L"My Merry May Fix 1.0.6", 22);
         SelectObject(panelDc_, bodyFont);
 
         wchar_t line[256]{};
@@ -2663,34 +2693,35 @@ float4 TextboxPS(Output input) : SV_Target {
         TextOutW(panelDc_, 24, 218, line, static_cast<int>(wcslen(line)));
         drawSlider(218, g_textboxColorB.load(), 255, RGB(72, 125, 230));
 
-        swprintf(line, 256, L"%lc Voiced text uses normal speed: %ls", selected == 6 ? L'>' : L' ',
-                 g_matchVoicedTextSpeed.load() ? L"On" : L"Off");
+        swprintf(line, 256, L"%lc Uniform textbox opacity: %ls (slider / 2)",
+                 selected == 6 ? L'>' : L' ', g_uniformTextboxOpacity.load() ? L"On" : L"Off");
         SetTextColor(panelDc_, selected == 6 ? RGB(102, 224, 220) : RGB(235, 240, 247));
         TextOutW(panelDc_, 24, 249, line, static_cast<int>(wcslen(line)));
 
-        swprintf(line, 256, L"%lc Keep voice until next voiced line: %ls", selected == 7 ? L'>' : L' ',
-                 g_continueVoiceUntilNext.load() ? L"On" : L"Off");
+        swprintf(line, 256, L"%lc Voiced text uses normal speed: %ls", selected == 7 ? L'>' : L' ',
+                 g_matchVoicedTextSpeed.load() ? L"On" : L"Off");
         SetTextColor(panelDc_, selected == 7 ? RGB(102, 224, 220) : RGB(235, 240, 247));
         TextOutW(panelDc_, 24, 280, line, static_cast<int>(wcslen(line)));
 
-        swprintf(line, 256, L"%lc ADV wrapping: %ls", selected == 8 ? L'>' : L' ',
-                 g_wrapEnabled.load() ? L"On" : L"Off");
+        swprintf(line, 256, L"%lc Keep voice until next voiced line: %ls", selected == 8 ? L'>' : L' ',
+                 g_continueVoiceUntilNext.load() ? L"On" : L"Off");
         SetTextColor(panelDc_, selected == 8 ? RGB(102, 224, 220) : RGB(235, 240, 247));
         TextOutW(panelDc_, 24, 311, line, static_cast<int>(wcslen(line)));
 
-        swprintf(line, 256, L"%lc ADV line width: %u (next line)", selected == 9 ? L'>' : L' ',
-                 g_wrapWidth.load());
+        swprintf(line, 256, L"%lc ADV wrapping: %ls", selected == 9 ? L'>' : L' ',
+                 g_wrapEnabled.load() ? L"On" : L"Off");
         SetTextColor(panelDc_, selected == 9 ? RGB(102, 224, 220) : RGB(235, 240, 247));
         TextOutW(panelDc_, 24, 342, line, static_cast<int>(wcslen(line)));
-        const LONG displayWidth = std::clamp(static_cast<LONG>(g_wrapWidth.load()), 800L, 1420L);
-        drawSlider(342, (displayWidth - 800) * 100 / 620, 100, RGB(58, 201, 196));
 
-        swprintf(line, 256, L"%lc Hide AUTO/SKIP buttons: %ls", selected == 10 ? L'>' : L' ',
-                 g_hideAutoSkipButtons.load() ? L"On" : L"Off");
+        swprintf(line, 256, L"%lc ADV line width: %u (next line)", selected == 10 ? L'>' : L' ',
+                 g_wrapWidth.load());
         SetTextColor(panelDc_, selected == 10 ? RGB(102, 224, 220) : RGB(235, 240, 247));
         TextOutW(panelDc_, 24, 373, line, static_cast<int>(wcslen(line)));
-        swprintf(line, 256, L"%lc Uniform textbox opacity: %ls (slider / 2)",
-                 selected == 11 ? L'>' : L' ', g_uniformTextboxOpacity.load() ? L"On" : L"Off");
+        const LONG displayWidth = std::clamp(static_cast<LONG>(g_wrapWidth.load()), 800L, 1420L);
+        drawSlider(373, (displayWidth - 800) * 100 / 620, 100, RGB(58, 201, 196));
+
+        swprintf(line, 256, L"%lc Hide AUTO/SKIP buttons: %ls", selected == 11 ? L'>' : L' ',
+                 g_hideAutoSkipButtons.load() ? L"On" : L"Off");
         SetTextColor(panelDc_, selected == 11 ? RGB(102, 224, 220) : RGB(235, 240, 247));
         TextOutW(panelDc_, 24, 404, line, static_cast<int>(wcslen(line)));
         SetTextColor(panelDc_, RGB(235, 240, 247));
@@ -2870,7 +2901,7 @@ LRESULT CALLBACK HookWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
             if (wParam == VK_LEFT || wParam == VK_RIGHT) {
                 const LONG selection = g_overlaySelection.load();
                 // Repeat only numeric sliders, including the ADV width.
-                if (repeated && !((selection >= 2 && selection <= 5) || selection == 9)) return 0;
+                if (repeated && !((selection >= 2 && selection <= 5) || selection == 10)) return 0;
                 const LONG direction = wParam == VK_RIGHT ? 1 : -1;
                 if (selection == 0) {
                     LONG mode = g_aspectMode.load();
@@ -2888,38 +2919,38 @@ LRESULT CALLBACK HookWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
                     SaveSpritesOverPillarbox();
                     Log("Sprites over pillarbox changed to %d", enabled);
                 } else if (selection == 6) {
+                    const bool enabled = !g_uniformTextboxOpacity.load();
+                    g_uniformTextboxOpacity.store(enabled);
+                    SaveUniformTextboxOpacity();
+                    Log("Uniform textbox opacity changed to %d (target alpha=%ld%%)",
+                        enabled, g_textboxOpacity.load() / 2);
+                } else if (selection == 7) {
                     const bool enabled = !g_matchVoicedTextSpeed.load();
                     g_matchVoicedTextSpeed.store(enabled);
                     SaveVoiceTextSpeed();
                     Log("Voiced text normal-speed matching changed to %d", enabled);
-                } else if (selection == 7) {
+                } else if (selection == 8) {
                     const bool enabled = !g_continueVoiceUntilNext.load();
                     g_continueVoiceUntilNext.store(enabled);
                     SaveVoiceContinuation();
                     Log("Voice continuation until next voiced line changed to %d", enabled);
-                } else if (selection == 8) {
+                } else if (selection == 9) {
                     const bool enabled = !g_wrapEnabled.load();
                     g_wrapEnabled.store(enabled);
                     SaveExperimentalWrapping();
                     Log("ADV wrapping changed to %d", enabled);
-                } else if (selection == 9) {
+                } else if (selection == 10) {
                     const LONG oldWidth = std::clamp(static_cast<LONG>(g_wrapWidth.load()), 800L, 1420L);
                     const LONG step = GetKeyState(VK_SHIFT) < 0 ? 1 : 5;
                     const LONG width = std::clamp(oldWidth + direction * step, 800L, 1420L);
                     g_wrapWidth.store(static_cast<UINT>(width));
                     SaveExperimentalWrapping();
                     Log("ADV wrapping width changed to %ld", width);
-                } else if (selection == 10) {
+                } else if (selection == 11) {
                     const bool hide = !g_hideAutoSkipButtons.load();
                     g_hideAutoSkipButtons.store(hide);
                     SaveAutoSkipButtons();
                     Log("AUTO/SKIP button visuals hidden=%d", hide);
-                } else if (selection == 11) {
-                    const bool enabled = !g_uniformTextboxOpacity.load();
-                    g_uniformTextboxOpacity.store(enabled);
-                    SaveUniformTextboxOpacity();
-                    Log("Uniform textbox opacity changed to %d (target alpha=%ld%%)",
-                        enabled, g_textboxOpacity.load() / 2);
                 } else {
                     std::atomic<LONG>* value = nullptr;
                     LONG maximum = 255;
@@ -3503,7 +3534,7 @@ void PatchLoadedModules() {
 }
 
 DWORD WINAPI InitializationThread(void*) {
-    Log("MyMerryMayFix starting: version 1.0.5, build 56 (2026-10-14); native-Windows=%d", g_nativeWindows);
+    Log("MyMerryMayFix starting: version 1.0.6, build 57 (2026-10-18); native-Windows=%d", g_nativeWindows);
     LogDisplaySnapshot("startup", nullptr);
     // Keep polling because the launcher loads the selected Master DLL after this
     // proxy may already have been initialized.
